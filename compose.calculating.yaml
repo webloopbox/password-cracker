@@ -7,6 +7,8 @@ services:
       - "./backend - calculating:/App"
     ports:
       - "5099:5099"
+    env_file:
+      - .env
     networks:
       - password-cracker-network
 
