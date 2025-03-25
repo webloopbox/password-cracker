@@ -1,0 +1,15 @@
+services:
+  password-cracker-backend-calculating:
+    build:
+      context: "./backend - calculating"
+      dockerfile: Dockerfile
+    volumes:
+      - "./backend - calculating:/App"
+    ports:
+      - "5099:5099"
+    networks:
+      - password-cracker-network
+
+networks:
+  password-cracker-network:
+    driver: bridge

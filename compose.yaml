@@ -1,0 +1,28 @@
+services:
+  password-cracker-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - password-cracker-network
+    ports:
+      - "5173:5173"
+    restart: always
+
+  password-cracker-backend-central:
+    build:
+      context: "./backend - central"
+      dockerfile: Dockerfile
+    volumes:
+      - "./backend - central:/App"
+    ports:
+      - "5098:5098"
+    networks:
+      - password-cracker-network
+
+networks:
+  password-cracker-network:
+    driver: bridge
