@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { PasswordCrackerDialog } from "./password-cracker-dialog";
+import axios from "axios";
+import { BASE_URL } from "@/api";
 
 const formSchema = z.object({
   username: z
@@ -29,7 +31,12 @@ const formSchema = z.object({
     .gte(5, "Hasło musi mieć co najmniej 6 znaków.")
     .optional(),
   hosts: z.coerce.number().gte(2, "Liczba hostów musi być większa od 1."),
-  dictionaryFile: z.any().optional(),
+  dictionaryFile: z
+    .instanceof(File)
+    .refine((file) => file.name.endsWith(".zip"), {
+      message: "Plik musi być w formacie .zip.",
+    })
+    .optional(),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -51,12 +58,51 @@ export default function PasswordCrackerForm() {
 
   const onSubmit: SubmitHandler<FormData> = async (data) => {
     console.log(data);
-    setDialogOpen(true);
+
+    try {
+      if (data.method === "brute-force") {
+        await axios.post(`${BASE_URL}/crack-brute-force`, {
+          username: data.username,
+          passwordLength: data.passwordLength,
+          hosts: data.hosts,
+        });
+      } else if (data.method === "słownikowa") {
+        const formData = new FormData();
+        formData.append("username", data.username);
+        formData.append("hosts", data.hosts.toString());
+        if (data.dictionaryFile) {
+          formData.append("file", data.dictionaryFile);
+        }
+
+        await axios.post(`${BASE_URL}/crack-dictionary`, formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
+      }
+
+      toast("Żądanie zostało wysłane pomyślnie!", {
+        style: { background: "green", color: "white" },
+      });
+      setDialogOpen(true);
+    } catch (error) {
+      console.error(error);
+      toast("Wystąpił błąd podczas wysyłania żądania.", {
+        style: { background: "red", color: "white" },
+      });
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+
     if (file) {
+      if (!file.name.endsWith(".zip")) {
+        toast("Plik musi być w formacie .zip.", {
+          style: { background: "red", color: "white" },
+        });
+        return;
+      }
       setSelectedFileName(file.name);
     }
   };
@@ -68,10 +114,18 @@ export default function PasswordCrackerForm() {
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];
-    if (file && fileInputRef.current) {
-      const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(file);
-      fileInputRef.current.files = dataTransfer.files;
+    if (file) {
+      if (!file.name.endsWith(".zip")) {
+        toast("Plik musi być w formacie .zip.", {
+          style: { background: "red", color: "white" },
+        });
+        return;
+      }
+      if (fileInputRef.current) {
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(file);
+        fileInputRef.current.files = dataTransfer.files;
+      }
       setSelectedFileName(file.name);
     }
   };
