@@ -1,29 +1,24 @@
-using backend___central.Services;
 using Microsoft.AspNetCore.Mvc;
+using backend___central.Services;
 
 namespace backend___central.Controllers
 {
     [ApiController]
     [Route("api/cracking")]
-    public class CrackingController(IEnumerable<ILogService> logServices) : ControllerBase
+    public class CrackingController(ICrackingService crackingService) : ControllerBase
     {
-        private readonly IEnumerable<ILogService> logServices = logServices;
-
+        private readonly ICrackingService crackingService = crackingService;
 
         [HttpPost("brute-force")]
-        public IActionResult CrackBruteForce()
+        public IResult CrackBruteForce()
         {
-            InfoLogService? infoLogService = logServices?.OfType<InfoLogService>().FirstOrDefault();
-            infoLogService?.LogMessage("Starting cracking password for user: " + " using brute force method");
-            return Ok("BruteForce cracking initiated.");
+            return crackingService.HandleBruteForceCracking(HttpContext);
         }
 
         [HttpPost("dictionary")]
-        public IActionResult CrackDictionary()
+        public IResult CrackDictionary()
         {
-            InfoLogService? infoLogService = logServices?.OfType<InfoLogService>().FirstOrDefault();
-            infoLogService?.LogMessage("Starting cracking password for user: " + " using dictionary method");
-            return Ok("Dictionary cracking initiated.");
+            return crackingService.HandleDictionaryCracking(HttpContext);
         }
     }
 }

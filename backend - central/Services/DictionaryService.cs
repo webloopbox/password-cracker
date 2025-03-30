@@ -1,0 +1,222 @@
+using System.Net;
+using System.Security.Cryptography;
+
+namespace backend___central.Services
+{
+    public class DictionaryService(IEnumerable<ILogService> logServices) : IDictionaryService
+    {
+        private string Operation { get; set; } = "";
+        private string DictionaryDirectory { get; set; } = "";
+        private string[] DirectoryFiles { get; set; } = [];
+        private readonly IEnumerable<ILogService> logServices = logServices;
+
+        public IResult GetCurrentDictionaryHashResult()
+        {
+            ILogService.LogInfo(logServices, "Made request to get actual dictionary hash");
+            try
+            {
+                Operation = "getting current dictionary hash";
+                DictionaryDirectory = Path.Combine(Directory.GetCurrentDirectory(), "dictionary");
+                HandleDirectoryCheck();
+                SetDirectoryFiles();
+                string dictionaryHash = GetLatestDictionaryHash();
+                return Results.Ok(dictionaryHash);
+            }
+            catch (Exception ex)
+            {
+                ILogService.LogError(logServices, $"Error while retrieving current dictionary hash: {ex.Message}");
+                return Results.Problem($"An error occurred while retrieving dictionary hash: {ex.Message}");
+            }
+        }
+
+        public IResult GetCurrentDictionaryPackResult()
+        {
+            ILogService.LogInfo(logServices, "Made request to get actual dictionary pack file");
+            try
+            {
+                Operation = "getting current dictionary pack file";
+                DictionaryDirectory = Path.Combine(Directory.GetCurrentDirectory(), "dictionary");
+                HandleDirectoryCheck();
+                SetDirectoryFiles();
+                string latestZipFileName = GetLatestDictionaryHash();
+                string latestZipFilePath = Path.Combine(DictionaryDirectory, latestZipFileName);
+                FileStream fileStream = new(latestZipFilePath, FileMode.Open, FileAccess.Read);
+                return Results.File(fileStream, "application/zip", Path.GetFileName(latestZipFilePath));
+            }
+            catch (Exception ex)
+            {
+                ILogService.LogError(logServices, $"Error while retrieving current dictionary pack: {ex.Message}");
+                return Results.Problem($"An error occurred while retrieving dictionary pack file: {ex.Message}");
+            }
+        }
+
+        public async Task<IResult> SynchronizeDictionaryResult(HttpContext httpContext)
+        {
+            ILogService.LogInfo(logServices, "Made request to synchronize dictionary");
+            try
+            {
+                Operation = "synchronize dictionary";
+                DictionaryDirectory = Path.Combine(Directory.GetCurrentDirectory(), "dictionary");
+                IFormCollection iFormCollection = await httpContext.Request.ReadFormAsync();
+                IFormFile? iFormFile = iFormCollection.Files.GetFile("file");
+                HandleValidateFile(iFormFile);
+                string fileName = await HandleSaveFile(iFormFile);
+                SynchronizeDictionaryWithConnectedServers(iFormFile);
+                return Results.Ok(new { FileName = $"{fileName}.zip", Path = DictionaryDirectory });
+            }
+            catch (Exception ex)
+            {
+                ILogService.LogError(logServices, $"Error while synchronizing dictionary: {ex.Message}");
+                return Results.Problem($"An error occurred while synchronizing dictionary pack file: {ex.Message}");
+            }
+        }
+
+        private void SynchronizeDictionaryWithConnectedServers(IFormFile? iFormFile)
+        {
+            if (iFormFile == null) return;
+            List<IPAddress> serversToRemove = new();
+            List<IPAddress> connectedServers = Program.ServersIpAddresses;
+            foreach (IPAddress connectedServer in connectedServers)
+            {
+                bool isSuccess = TrySynchronizeWithServer(iFormFile, connectedServer).Result;
+                if (!isSuccess)
+                {
+                    serversToRemove.Add(connectedServer);
+                }
+            }
+            RemoveUnresponsiveServers(serversToRemove);
+        }
+
+        private async Task<bool> TrySynchronizeWithServer(IFormFile iFormFile, IPAddress connectedServer)
+        {
+            try
+            {
+                using HttpClient httpClient = new();
+                httpClient.Timeout = TimeSpan.FromSeconds(10);
+                using MemoryStream memoryStream = new();
+                await iFormFile.CopyToAsync(memoryStream);
+                memoryStream.Position = 0;
+                using MultipartFormDataContent formData = CreateFormData(memoryStream, iFormFile.FileName);
+                string serverUrl = $"http://{connectedServer}:5099/api/synchronizing/dictionary";
+                HttpResponseMessage response = await httpClient.PostAsync(serverUrl, formData);
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new Exception($"Server {connectedServer} responded with status code {response.StatusCode}");
+                }
+                ILogService.LogInfo(logServices, $"Successfully synchronized dictionary with server {connectedServer}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                ILogService.LogError(logServices, $"Failed to synchronize dictionary with server {connectedServer}: {ex.Message}");
+                return false;
+            }
+        }
+
+        private void RemoveUnresponsiveServers(List<IPAddress> serversToRemove)
+        {
+            foreach (IPAddress serverToRemove in serversToRemove)
+            {
+                Program.ServersIpAddresses.Remove(serverToRemove);
+                ILogService.LogInfo(logServices, $"Removed unresponsive server {serverToRemove} from the list");
+            }
+        }
+
+        private async Task<string> HandleSaveFile(IFormFile? iFormFile)
+        {
+            HandleCreateDirectory();
+            return await HandleSaveDictionaryPack(iFormFile);
+        }
+
+        private async Task<string> HandleSaveDictionaryPack(IFormFile? iFormFile)
+        {
+            string dictionaryLocation = Path.Combine(DictionaryDirectory, GetNewDictionaryPackName());
+            FileStream fileStream = new(dictionaryLocation, FileMode.CreateNew);
+            if (iFormFile != null)
+            {
+                await iFormFile.CopyToAsync(fileStream);
+                InfoLogService? infoLogService = logServices?.OfType<InfoLogService>().FirstOrDefault();
+                infoLogService?.LogMessage("Successfully saved new dictionary");
+            }
+            return dictionaryLocation;
+        }
+
+        private void HandleValidateFile(IFormFile? iFormFile)
+        {
+            bool isFormFileNotExists = iFormFile == null || iFormFile.Length == 0;
+            bool isFormFileNameInvalid = iFormFile != null && !iFormFile.FileName.EndsWith(".zip");
+            if (isFormFileNotExists || isFormFileNameInvalid)
+            {
+                ILogService.LogError(logServices, $"Received dictionary pack was invalid while trying to {Operation}");
+                throw new Exception("Invalid dictionary pack content or format.");
+            }
+        }
+
+        private void HandleDirectoryCheck()
+        {
+            if (Directory.Exists(DictionaryDirectory) == false)
+            {
+                ILogService.LogError(logServices, $"Directory path was not found while trying to {Operation}");
+                throw new Exception("Dictionary path was not found.");
+            }
+        }
+
+        private void HandleCreateDirectory()
+        {
+            if (!Directory.Exists(DictionaryDirectory))
+            {
+                Directory.CreateDirectory(DictionaryDirectory);
+                ILogService.LogInfo(logServices, "Created dictionary directory");
+            }
+        }
+
+        private void SetDirectoryFiles()
+        {
+            string[] directoryFiles = Directory.GetFiles(DictionaryDirectory);
+            if (directoryFiles.Length <= 0)
+            {
+                ILogService.LogError(logServices, $"No files found in directory path while trying to {Operation}");
+                throw new Exception("No files found in directory path.");
+            }
+            DirectoryFiles = directoryFiles;
+        }
+
+        private string GetLatestDictionaryHash()
+        {
+            FileInfo? latestFile = DirectoryFiles
+                .Select(file => new FileInfo(file))
+                .OrderByDescending(fileInfo => fileInfo.CreationTime)
+                .FirstOrDefault();
+            if (latestFile == null)
+            {
+                ILogService.LogError(logServices, $"No valid dictionary hash files found while trying to {Operation}");
+                throw new Exception("No valid dictionary hash files found.");
+            }
+            string fileName = latestFile.Name;
+            int startIndex = fileName.IndexOf("dictionary-");
+            if (startIndex >= 0)
+            {
+                fileName = fileName[startIndex..];
+            }
+            return fileName;
+        }
+
+        private static MultipartFormDataContent CreateFormData(Stream fileStream, string fileName)
+        {
+            MultipartFormDataContent formData = new()
+            {
+                { new StreamContent(fileStream), "file", fileName }
+            };
+            return formData;
+        }
+
+        private static string GetNewDictionaryPackName()
+        {
+            byte[] guidByteArray = Guid.NewGuid().ToByteArray();
+            byte[] hashByteArray = SHA256.HashData(guidByteArray);
+            string hash = Convert.ToHexString(hashByteArray)[..16];
+            string currentDate = DateTime.Now.ToString("yyyy-MM-dd");
+            return $"dictionary-{hash}-{currentDate}.zip";
+        }
+    }
+}
