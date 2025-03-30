@@ -223,6 +223,7 @@ export default function PasswordCrackerForm() {
                       {...field}
                       id="passwordLength"
                       type="number"
+                      min={6}
                       className="w-full sm:w-48 bg-gray-100"
                     />
                   )}
@@ -247,6 +248,7 @@ export default function PasswordCrackerForm() {
                     <Input
                       {...field}
                       id="hosts"
+                      min={1}
                       type="number"
                       className="w-full sm:w-48 bg-gray-100"
                     />
