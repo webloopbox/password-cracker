@@ -19,6 +19,8 @@ services:
     volumes:
       - "./backend - central:/App"
       - ./dictionary:/dictionary
+    env_file:
+      - .env
     ports:
       - "5098:5098"
     depends_on:
