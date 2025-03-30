@@ -61,7 +61,7 @@ export default function PasswordCrackerForm() {
 
     try {
       if (data.method === "brute-force") {
-        await axios.post(`${BASE_URL}/crack-brute-force`, {
+        await axios.post(`${BASE_URL}/brute-force`, {
           username: data.username,
           passwordLength: data.passwordLength,
           hosts: data.hosts,
@@ -74,7 +74,7 @@ export default function PasswordCrackerForm() {
           formData.append("file", data.dictionaryFile);
         }
 
-        await axios.post(`${BASE_URL}/crack-dictionary`, formData, {
+        await axios.post(`${BASE_URL}/cracking/dictionary`, formData, {
           headers: {
             "Content-Type": "multipart/form-data",
           },
