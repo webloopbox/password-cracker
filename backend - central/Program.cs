@@ -24,6 +24,8 @@ namespace backend___central
         {
             try
             {
+                ConfigureKestrel(webApplicationBuilder);
+                ConfigureMultipartBodyLength(webApplicationBuilder); 
                 SetupCorsPolicy();
                 SetupServicesScopes();
                 Task runServerTask = Task.Run(() => RunCentralServer());
@@ -48,6 +50,7 @@ namespace backend___central
 
         private void SetupServicesScopes()
         {
+            _ = webApplicationBuilder.Services.AddScoped<DictionaryService>();
             _ = webApplicationBuilder.Services.AddScoped<ILogService, InfoLogService>();
             _ = webApplicationBuilder.Services.AddScoped<ILogService, ErrorLogService>();
             _ = webApplicationBuilder.Services.AddScoped<ICrackingService, CrackingService>();
@@ -109,7 +112,27 @@ namespace backend___central
             {
                 IsDatabaseRunning = false;
                 LogCentralServerError(ex);
+                if (webApplication != null)
+                {
+                    await LogCentralServerInfo("Stopped central server");
+                    await webApplication.StopAsync();
+                }
             }
+        }
+        private static void ConfigureKestrel(WebApplicationBuilder builder)
+        {
+            builder.WebHost.ConfigureKestrel(options =>
+            {
+                options.Limits.MaxRequestBodySize = 32212254720;
+            });
+        }
+
+        private static void ConfigureMultipartBodyLength(WebApplicationBuilder builder)
+        {
+            builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+            {
+                options.MultipartBodyLengthLimit = 32212254720;
+            });
         }
     }
 }

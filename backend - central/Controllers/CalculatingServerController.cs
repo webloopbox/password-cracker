@@ -1,5 +1,5 @@
-using backend___central.Services;
 using Microsoft.AspNetCore.Mvc;
+using backend___central.Services;
 
 namespace backend___central.Controllers
 {
@@ -10,9 +10,9 @@ namespace backend___central.Controllers
         private readonly ICalculatingServerService calculatingServerService = calculatingServerService;
 
         [HttpPost("connect")]
-        public IResult ConnectToCentralServer()
+        public async Task<IResult> ConnectToCentralServer()
         {
-            return calculatingServerService.HandleConnectToCentralServerRequest(HttpContext);
+            return await calculatingServerService.HandleConnectToCentralServerRequest(HttpContext);
         }
     }
 }

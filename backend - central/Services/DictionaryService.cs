@@ -6,7 +6,7 @@ namespace backend___central.Services
     public class DictionaryService(IEnumerable<ILogService> logServices) : IDictionaryService
     {
         private string Operation { get; set; } = "";
-        private string DictionaryDirectory { get; set; } = "";
+        public string DictionaryDirectory { get; set; } = "";
         private string[] DirectoryFiles { get; set; } = [];
         private readonly IEnumerable<ILogService> logServices = logServices;
 
@@ -61,7 +61,7 @@ namespace backend___central.Services
                 IFormFile? iFormFile = iFormCollection.Files.GetFile("file");
                 HandleValidateFile(iFormFile);
                 string fileName = await HandleSaveFile(iFormFile);
-                SynchronizeDictionaryWithConnectedServers(iFormFile);
+                SynchronizeDictionaryWithConnectedServers(iFormFile, fileName);
                 return Results.Ok(new { FileName = $"{fileName}.zip", Path = DictionaryDirectory });
             }
             catch (Exception ex)
@@ -71,14 +71,55 @@ namespace backend___central.Services
             }
         }
 
-        private void SynchronizeDictionaryWithConnectedServers(IFormFile? iFormFile)
+        public string GetLatestDictionaryHash()
+        {
+            FileInfo? latestFile = DirectoryFiles
+                .Select(file => new FileInfo(file))
+                .OrderByDescending(fileInfo => fileInfo.CreationTime)
+                .FirstOrDefault();
+
+            if (latestFile == null)
+            {
+                ILogService.LogError(logServices, $"No valid dictionary hash files found while trying to {Operation}");
+                throw new Exception("No valid dictionary hash files found.");
+            }
+            string fileName = latestFile.Name;
+            int startIndex = fileName.IndexOf("dictionary-");
+            if (startIndex >= 0)
+            {
+                fileName = fileName[startIndex..];
+            }
+            return fileName;
+        }
+
+        public static MultipartFormDataContent CreateFormData(Stream fileStream, string fileName)
+        {
+            MultipartFormDataContent formData = new()
+            {
+                { new StreamContent(fileStream), "file", fileName }
+            };
+            return formData;
+        }
+
+        public void SetDirectoryFiles()
+        {
+            string[] directoryFiles = Directory.GetFiles(DictionaryDirectory);
+            if (directoryFiles.Length <= 0)
+            {
+                ILogService.LogError(logServices, $"No files found in directory path while trying to {Operation}");
+                throw new Exception("No files found in directory path.");
+            }
+            DirectoryFiles = directoryFiles;
+        }
+
+        private void SynchronizeDictionaryWithConnectedServers(IFormFile? iFormFile, String fileName)
         {
             if (iFormFile == null) return;
-            List<IPAddress> serversToRemove = new();
+            List<IPAddress> serversToRemove = [];
             List<IPAddress> connectedServers = Program.ServersIpAddresses;
             foreach (IPAddress connectedServer in connectedServers)
             {
-                bool isSuccess = TrySynchronizeWithServer(iFormFile, connectedServer).Result;
+                bool isSuccess = TrySynchronizeWithServer(iFormFile, fileName, connectedServer).Result;
                 if (!isSuccess)
                 {
                     serversToRemove.Add(connectedServer);
@@ -87,16 +128,16 @@ namespace backend___central.Services
             RemoveUnresponsiveServers(serversToRemove);
         }
 
-        private async Task<bool> TrySynchronizeWithServer(IFormFile iFormFile, IPAddress connectedServer)
+        private async Task<bool> TrySynchronizeWithServer(IFormFile iFormFile, String fileName, IPAddress connectedServer)
         {
             try
             {
                 using HttpClient httpClient = new();
-                httpClient.Timeout = TimeSpan.FromSeconds(10);
+                httpClient.Timeout = TimeSpan.FromSeconds(30);
                 using MemoryStream memoryStream = new();
                 await iFormFile.CopyToAsync(memoryStream);
                 memoryStream.Position = 0;
-                using MultipartFormDataContent formData = CreateFormData(memoryStream, iFormFile.FileName);
+                using MultipartFormDataContent formData = CreateFormData(memoryStream, fileName);
                 string serverUrl = $"http://{connectedServer}:5099/api/synchronizing/dictionary";
                 HttpResponseMessage response = await httpClient.PostAsync(serverUrl, formData);
                 if (!response.IsSuccessStatusCode)
@@ -168,46 +209,6 @@ namespace backend___central.Services
                 Directory.CreateDirectory(DictionaryDirectory);
                 ILogService.LogInfo(logServices, "Created dictionary directory");
             }
-        }
-
-        private void SetDirectoryFiles()
-        {
-            string[] directoryFiles = Directory.GetFiles(DictionaryDirectory);
-            if (directoryFiles.Length <= 0)
-            {
-                ILogService.LogError(logServices, $"No files found in directory path while trying to {Operation}");
-                throw new Exception("No files found in directory path.");
-            }
-            DirectoryFiles = directoryFiles;
-        }
-
-        private string GetLatestDictionaryHash()
-        {
-            FileInfo? latestFile = DirectoryFiles
-                .Select(file => new FileInfo(file))
-                .OrderByDescending(fileInfo => fileInfo.CreationTime)
-                .FirstOrDefault();
-            if (latestFile == null)
-            {
-                ILogService.LogError(logServices, $"No valid dictionary hash files found while trying to {Operation}");
-                throw new Exception("No valid dictionary hash files found.");
-            }
-            string fileName = latestFile.Name;
-            int startIndex = fileName.IndexOf("dictionary-");
-            if (startIndex >= 0)
-            {
-                fileName = fileName[startIndex..];
-            }
-            return fileName;
-        }
-
-        private static MultipartFormDataContent CreateFormData(Stream fileStream, string fileName)
-        {
-            MultipartFormDataContent formData = new()
-            {
-                { new StreamContent(fileStream), "file", fileName }
-            };
-            return formData;
         }
 
         private static string GetNewDictionaryPackName()
