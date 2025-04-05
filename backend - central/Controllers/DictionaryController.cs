@@ -1,30 +1,30 @@
 using Microsoft.AspNetCore.Mvc;
 using backend___central.Services;
+using System.Threading.Tasks;
 
 namespace backend___central.Controllers
 {
     [ApiController]
     [Route("api/synchronizing")]
-    public class DictionaryController(IDictionaryService dictionaryService) : ControllerBase
+    public class DictionaryController : ControllerBase
     {
-        private readonly IDictionaryService dictionaryService = dictionaryService;
+        private readonly IDictionaryService dictionaryService;
+
+        public DictionaryController(IDictionaryService dictionaryService)
+        {
+            this.dictionaryService = dictionaryService;
+        }
 
         [HttpPost("dictionary")]
-        public async Task<IResult> SynchronizeDictionary()
+        public async Task<IActionResult> SynchronizeDictionary()
         {
             return await dictionaryService.SynchronizeDictionaryResult(HttpContext);
         }
 
         [HttpGet("dictionary")]
-        public IResult GetActualDictionaryFile()
+        public IActionResult GetActualDictionaryFile()
         {
             return dictionaryService.GetCurrentDictionaryPackResult();
-        }
-
-        [HttpGet("dictionary-hash")]
-        public IResult GetActualDictionaryHash()
-        {
-            return dictionaryService.GetCurrentDictionaryHashResult();
         }
     }
 }

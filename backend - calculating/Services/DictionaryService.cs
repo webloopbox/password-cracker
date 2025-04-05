@@ -1,12 +1,25 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+
 namespace backend___calculating.Services
 {
-    public class DictionaryService(IEnumerable<ILogService> logServices) : IDictionaryService
+    public class DictionaryService : IDictionaryService
     {
+        private readonly IEnumerable<ILogService> logServices;
         private string DictionaryDirectory { get; set; } = "";
-        private string[] DirectoryFiles { get; set; } = [];
-        private readonly IEnumerable<ILogService> logServices = logServices;
+        private string[] DirectoryFiles { get; set; } = Array.Empty<string>();
 
-        public async Task<IResult> SynchronizeDictionaryResult(HttpContext httpContext)
+        public DictionaryService(IEnumerable<ILogService> logServices)
+        {
+            this.logServices = logServices;
+        }
+
+        public async Task<ActionResult> SynchronizeDictionaryResult(HttpContext httpContext)
         {
             ILogService.LogInfo(logServices, "Synchronizing dictionary with central server");
             try
@@ -17,12 +30,20 @@ namespace backend___calculating.Services
                 IFormFile? iFormFile = iFormCollection.Files.GetFile("file");
                 HandleValidateFile(iFormFile);
                 string fileName = await HandleSaveFile(iFormFile);
-                return Results.Ok(new { FileName = $"{fileName}.zip", Path = DictionaryDirectory });
+                return new ContentResult {
+                    Content = $"Successfully synchronized dictionary. Filename: {Path.GetFileName(fileName)}.txt, Path: {DictionaryDirectory}",
+                    ContentType = "text/plain",
+                    StatusCode = 200
+                };
             }
             catch (Exception ex)
             {
                 ILogService.LogError(logServices, $"Error while synchronizing dictionary: {ex.Message}");
-                return Results.Problem($"An error occurred while synchronizing dictionary pack file: {ex.Message}");
+                return new ContentResult {
+                    Content = $"An error occurred while synchronizing dictionary pack file: {ex.Message}",
+                    ContentType = "text/plain",
+                    StatusCode = 500
+                };
             }
         }
 
@@ -38,28 +59,37 @@ namespace backend___calculating.Services
 
         private async Task<string> HandleSaveDictionaryPack(IFormFile? iFormFile)
         {
-            if (iFormFile != null)
+            if (iFormFile == null)
             {
-                string dictionaryLocation = Path.Combine(DictionaryDirectory, iFormFile.FileName);
-                if (File.Exists(dictionaryLocation))
-                {
-                    ILogService.LogInfo(logServices, $"Dictionary file '{dictionaryLocation}' already exists. Skipping save.");
-                    return dictionaryLocation;
-                }
-                using FileStream fileStream = new(dictionaryLocation, FileMode.CreateNew, FileAccess.Write);
-                await iFormFile.CopyToAsync(fileStream);
-                ILogService.LogInfo(logServices, "Successfully saved new dictionary");
+                ILogService.LogError(logServices, "Dictionary file is null");
+                throw new ArgumentNullException(nameof(iFormFile), "Dictionary file cannot be null");
+            }
+            string dictionaryLocation = Path.Combine(DictionaryDirectory, iFormFile.FileName);
+            if (File.Exists(dictionaryLocation))
+            {
+                ILogService.LogInfo(logServices, $"Dictionary file '{dictionaryLocation}' already exists. Skipping save.");
                 return dictionaryLocation;
             }
-        
-            ILogService.LogError(logServices, "Invalid dictionary filename");
-            throw new Exception("Invalid dictionary filename");
+            using (FileStream fileStream = new (dictionaryLocation, FileMode.CreateNew, FileAccess.Write))
+            {
+                await iFormFile.CopyToAsync(fileStream);
+                await fileStream.FlushAsync();
+            }
+            FileInfo fileInfo = new (dictionaryLocation);
+            if (fileInfo.Length == 0)
+            {
+                File.Delete(dictionaryLocation);
+                ILogService.LogError(logServices, "Created dictionary file is empty");
+                throw new Exception("Failed to save dictionary - file is empty");
+            }
+            ILogService.LogInfo(logServices, $"Successfully saved new dictionary. Size: {fileInfo.Length} bytes");
+            return dictionaryLocation;
         }
 
         private void HandleValidateFile(IFormFile? iFormFile)
         {
             bool isFormFileNotExists = iFormFile == null || iFormFile.Length == 0;
-            bool isFormFileNameInvalid = iFormFile != null && !iFormFile.FileName.EndsWith(".zip");
+            bool isFormFileNameInvalid = iFormFile != null && !iFormFile.FileName.EndsWith(".txt");
             if (isFormFileNotExists || isFormFileNameInvalid)
             {
                 ILogService.LogError(logServices, $"Received dictionary pack was invalid while trying to synchronize dictionary");

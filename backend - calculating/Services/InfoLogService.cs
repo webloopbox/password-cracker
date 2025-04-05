@@ -1,3 +1,6 @@
+using System;
+using System.IO;
+
 namespace backend___calculating.Services
 {
     public class InfoLogService : ILogService
@@ -5,15 +8,15 @@ namespace backend___calculating.Services
         private string LogContent { get; set; } = "";
         private readonly string logFilePath = Path.Combine(Directory.GetCurrentDirectory(), "logs-backend-calculating.txt");
 
-        public void LogMessage(string message)
+        public override void LogMessage(string message)
         {
-            string timestamp = ILogService.GetCurrentDate();
+            string timestamp = GetCurrentDate();
             LogContent = $"[INFO] {message} at [{timestamp}]";
             Console.WriteLine(LogContent);
             SaveToFile();
         }
 
-        public void SaveToFile()
+        public override void SaveToFile()
         {
             try
             {

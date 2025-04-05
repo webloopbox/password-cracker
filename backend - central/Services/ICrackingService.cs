@@ -1,8 +1,11 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+
 namespace backend___central.Services
 {
     public interface ICrackingService
     {
-        IResult HandleBruteForceCracking(HttpContext httpContext);
-        IResult HandleDictionaryCracking(HttpContext httpContext);
+        IActionResult HandleBruteForceCracking(HttpContext httpContext);
+        IActionResult HandleDictionaryCracking(HttpContext httpContext);
     }
 }

@@ -1,13 +1,26 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Net;
+using System.Net.Http;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 
 namespace backend___central.Services
 {
-    public class CalculatingServerService(IEnumerable<ILogService> logServices, DictionaryService dictionaryService) : ICalculatingServerService
+    public class CheckService : ICheckService
     {
-        private readonly IEnumerable<ILogService> logServices = logServices;
-        private readonly DictionaryService dictionaryService = dictionaryService;
+        private readonly IEnumerable<ILogService> _logServices;
+        private readonly DictionaryService _dictionaryService;
 
-        public async Task<IResult> HandleConnectToCentralServerRequest(HttpContext httpContext)
+        public CheckService(IEnumerable<ILogService> logServices, DictionaryService dictionaryService)
+        {
+            _logServices = logServices;
+            _dictionaryService = dictionaryService;
+        }
+
+        public async Task<IActionResult> HandleConnectToCentralServerRequest(HttpContext httpContext)
         {
             try
             {
@@ -16,25 +29,29 @@ namespace backend___central.Services
                 IPAddress ipAddress = IPAddress.Parse(ipAddressString);
                 if (ipAddress != null)
                 {
-                    ILogService.LogInfo(logServices, $"Made request to try to connect calculating server from IP address: {ipAddress}");
+                    ILogService.LogInfo(_logServices, $"Made request to try to connect calculating server from IP address: {ipAddress}");
                     HandleCheckIfDatabaseIsAlive();
                     await HandleCheckIfCanConnectToCalculatingServer(ipAddress);
-                    Program.ServersIpAddresses.Add(ipAddress);
-                    ILogService.LogInfo(logServices, $"Calculating server with IP address: {ipAddress} successfully connected to the central server");
-                    return Results.Ok();
+                    Startup.ServersIpAddresses.Add(ipAddress);
+                    ILogService.LogInfo(_logServices, $"Calculating server with IP address: {ipAddress} successfully connected to the central server");
+                    return new OkResult();
                 }
                 throw new Exception("Retrieved calculating server IP address is invalid");
             }
             catch (Exception ex)
             {
-                ILogService.LogError(logServices, $"Cannot connect to calculating server due to: {ex.Message}");
-                return Results.Problem($"An error occurred while trying to connect calculating server: {ex.Message}");
+                ILogService.LogError(_logServices, $"Cannot connect to calculating server due to: {ex.Message}");
+                return new ContentResult {
+                    Content = $"An error occurred while trying to connect calculating server: {ex.Message}",
+                    ContentType = "text/plain",
+                    StatusCode = 500
+                };
             }
         }
 
         private static void HandleCheckIfDatabaseIsAlive()
         {
-            if (Program.IsDatabaseRunning == false)
+            if (Startup.IsDatabaseRunning == false)
             {
                 throw new Exception("database for calculating operations is not running");
             }
@@ -46,20 +63,30 @@ namespace backend___central.Services
             {
                 using HttpClient httpClient = new();
                 httpClient.Timeout = TimeSpan.FromSeconds(30);
-                string serverUrl = $"http://{ipAddress}:5099/api/central/check-connection";
-                HttpResponseMessage httpResponseMessage = await httpClient.GetAsync(serverUrl);
+                string serverUrl = $"http://{ipAddress}:5099/api/calculating/check-connection";
+                StringContent dictionaryHash = new (_dictionaryService.GetCurrentDictionaryHashResult());
+                HttpResponseMessage httpResponseMessage = await httpClient.PostAsync(serverUrl, dictionaryHash);
                 if (!httpResponseMessage.IsSuccessStatusCode)
                 {
                     throw new Exception($"Server {ipAddress} responded with status code {httpResponseMessage.StatusCode}");
                 }
-                ILogService.LogInfo(logServices, $"Successfully connected to calculating server {ipAddress}");
-                dictionaryService.DictionaryDirectory = Path.Combine(Directory.GetCurrentDirectory(), "dictionary");
-                dictionaryService.SetDirectoryFiles();
-                await SynchronizeDictionaryWithCalculatingServer(ipAddress.ToString());
+                string responseContent = await httpResponseMessage.Content.ReadAsStringAsync();
+                if (string.IsNullOrEmpty(responseContent))
+                {
+                    ILogService.LogInfo(_logServices, $"No dictionary found on server {ipAddress}, starting synchronization");
+                    _dictionaryService.DictionaryDirectory = Path.Combine(Directory.GetCurrentDirectory(), "dictionary");
+                    _dictionaryService.SetDirectoryFiles();
+                    await SynchronizeDictionaryWithCalculatingServer(ipAddress.ToString());
+                }
+                else
+                {
+                    ILogService.LogInfo(_logServices, $"Dictionary already exists on server {ipAddress} at path: {responseContent}");
+                }
+                ILogService.LogInfo(_logServices, $"Successfully connected to calculating server {ipAddress}");
             }
             catch (Exception ex)
             {
-                ILogService.LogError(logServices, $"Failed to connect with calculating server {ipAddress} for reason: {ex.Message}");
+                ILogService.LogError(_logServices, $"Failed to connect with calculating server {ipAddress} for reason: {ex.Message}");
                 throw;
             }
         }
@@ -68,16 +95,16 @@ namespace backend___central.Services
         {
             try
             {
-                string latestZipFilePath = GetLatestDictionaryFilePath();
-                using FileStream fileStream = OpenFileStream(latestZipFilePath);
+                string latestFilePath = GetLatestDictionaryFilePath();
+                using FileStream fileStream = OpenFileStream(latestFilePath);
                 using HttpClient httpClient = CreateHttpClient();
-                using MultipartFormDataContent formData = CreateFormData(fileStream, latestZipFilePath);
+                using MultipartFormDataContent formData = CreateFormData(fileStream, latestFilePath);
                 await SendFileToServer(httpClient, serverIp, formData);
-                ILogService.LogInfo(logServices, $"Successfully synchronized dictionary with server {serverIp}");
+                ILogService.LogInfo(_logServices, $"Successfully synchronized dictionary with server {serverIp}");
             }
             catch (Exception ex)
             {
-                ILogService.LogError(logServices, $"Failed to synchronize dictionary with server {serverIp}: {ex.Message}");
+                ILogService.LogError(_logServices, $"Failed to synchronize dictionary with server {serverIp}: {ex.Message}");
                 throw;
             }
         }
@@ -85,7 +112,7 @@ namespace backend___central.Services
         private string GetLatestDictionaryFilePath()
         {
             string dictionaryDirectory = Path.Combine(Directory.GetCurrentDirectory(), "dictionary");
-            string latestDictionaryHash = dictionaryService.GetLatestDictionaryHash();
+            string latestDictionaryHash = _dictionaryService.GetLatestDictionaryHash();
             if (string.IsNullOrEmpty(latestDictionaryHash))
             {
                 throw new Exception("No valid dictionary hash found. Ensure the dictionary directory contains valid files.");

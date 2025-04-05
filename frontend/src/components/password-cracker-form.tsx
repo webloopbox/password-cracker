@@ -33,8 +33,8 @@ const formSchema = z.object({
 	hosts: z.coerce.number().gte(2, "Liczba hostów musi być większa od 1."),
 	dictionaryFile: z
 		.instanceof(File)
-		.refine((file) => file.name.endsWith(".zip"), {
-			message: "Plik musi być w formacie .zip.",
+		.refine((file) => file.name.endsWith(".txt"), {
+			message: "Plik musi być w formacie .txt.",
 		})
 		.optional(),
 });
@@ -101,8 +101,8 @@ export default function PasswordCrackerForm() {
 		const file = e.target.files?.[0];
 
 		if (file) {
-			if (!file.name.endsWith(".zip")) {
-				toast("Plik musi być w formacie .zip.", {
+			if (!file.name.endsWith(".txt")) {
+				toast("Plik musi być w formacie .txt.", {
 					style: { background: "red", color: "white" },
 				});
 				return;
@@ -119,8 +119,8 @@ export default function PasswordCrackerForm() {
 		e.preventDefault();
 		const file = e.dataTransfer.files?.[0];
 		if (file) {
-			if (!file.name.endsWith(".zip")) {
-				toast("Plik musi być w formacie .zip.", {
+			if (!file.name.endsWith(".txt")) {
+				toast("Plik musi być w formacie .txt.", {
 					style: { background: "red", color: "white" },
 				});
 				return;

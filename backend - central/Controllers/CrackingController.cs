@@ -5,18 +5,23 @@ namespace backend___central.Controllers
 {
     [ApiController]
     [Route("api/cracking")]
-    public class CrackingController(ICrackingService crackingService) : ControllerBase
+    public class CrackingController : ControllerBase
     {
-        private readonly ICrackingService crackingService = crackingService;
+        private readonly ICrackingService crackingService;
+
+        public CrackingController(ICrackingService crackingService)
+        {
+            this.crackingService = crackingService;
+        }
 
         [HttpPost("brute-force")]
-        public IResult CrackBruteForce()
+        public IActionResult CrackBruteForce()
         {
             return crackingService.HandleBruteForceCracking(HttpContext);
         }
 
         [HttpPost("dictionary")]
-        public IResult CrackDictionary()
+        public IActionResult CrackDictionary()
         {
             return crackingService.HandleDictionaryCracking(HttpContext);
         }

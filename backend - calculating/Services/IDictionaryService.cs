@@ -1,7 +1,11 @@
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+
 namespace backend___calculating.Services
 {
     public interface IDictionaryService
     {
-        Task<IResult> SynchronizeDictionaryResult(HttpContext httpContext);
+        Task<ActionResult> SynchronizeDictionaryResult(HttpContext httpContext);
     }
 }
