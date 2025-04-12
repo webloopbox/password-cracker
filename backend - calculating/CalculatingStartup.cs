@@ -11,9 +11,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using DotNetEnv;
 
-namespace backend___calculating {
-    public class Startup {
-        
+namespace backend___calculating
+{
+    public class CalculatingStartup
+    {
+
         private IApplicationBuilder? app;
         private IEnumerable<ILogService>? logServices;
         public static bool IsDatabaseRunning { get; private set; } = false;
@@ -21,12 +23,12 @@ namespace backend___calculating {
 
         public IConfiguration Configuration { get; }
 
-        public Startup(IConfiguration configuration)
+        public CalculatingStartup(IConfiguration configuration)
         {
             Env.Load(".env");
             Configuration = configuration;
         }
- 
+
         public async void Configure(IApplicationBuilder app, IEnumerable<ILogService> logServices)
         {
             this.app = app;
@@ -38,11 +40,12 @@ namespace backend___calculating {
         public void ConfigureServices(IServiceCollection services)
         {
             if (services != null)
-            {      
-                ConfigureCors(services);    
+            {
+                ConfigureCors(services);
                 services.AddScoped<CheckService>();
                 services.AddScoped<DictionaryService>();
                 services.AddScoped<ICheckService, CheckService>();
+                services.AddScoped<IBruteForceService, BruteForceService>();
                 services.AddScoped<IDictionaryService, DictionaryService>();
                 services.AddScoped<ILogService, InfoLogService>();
                 services.AddScoped<ILogService, ErrorLogService>();
@@ -50,7 +53,8 @@ namespace backend___calculating {
             }
         }
 
-        private void ConfigureApp(IApplicationBuilder app) {
+        private void ConfigureApp(IApplicationBuilder app)
+        {
             app.UseCors("AllowedOrigins");
             app.UseRouting();
             app.UseEndpoints(endpoints =>
@@ -60,7 +64,8 @@ namespace backend___calculating {
             LogCalculatingServerInfo("Calculating web server started");
         }
 
-        private static void ConfigureCors(IServiceCollection services) {            
+        private static void ConfigureCors(IServiceCollection services)
+        {
             services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
             {
                 options.MultipartBodyLengthLimit = 32212254720;
@@ -84,7 +89,7 @@ namespace backend___calculating {
             ILogService? infoLogService = logServices?.FirstOrDefault(logService => logService is InfoLogService);
             infoLogService?.LogMessage(message);
         }
-        
+
         private void LogCalculatingServerError(string message)
         {
             ILogService? errorLogService = logServices?.FirstOrDefault(logService => logService is ErrorLogService);
@@ -154,7 +159,8 @@ namespace backend___calculating {
 
         private void StopCalculatingServer()
         {
-            if(app != null) {
+            if (app != null)
+            {
                 LogCalculatingServerInfo("Stopped calculating server");
                 IHostApplicationLifetime lifetime = app.ApplicationServices.GetRequiredService<IHostApplicationLifetime>();
                 lifetime.StopApplication();

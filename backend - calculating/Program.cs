@@ -19,7 +19,7 @@ namespace backend___calculating
                     {
                         options.Limits.MaxRequestBodySize = 32212254720;
                     });
-                    webBuilder.UseStartup<Startup>();
+                    webBuilder.UseStartup<CalculatingStartup>();
                 });
     }
 }

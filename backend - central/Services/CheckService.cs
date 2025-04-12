@@ -41,7 +41,8 @@ namespace backend___central.Services
             catch (Exception ex)
             {
                 ILogService.LogError(_logServices, $"Cannot connect to calculating server due to: {ex.Message}");
-                return new ContentResult {
+                return new ContentResult
+                {
                     Content = $"An error occurred while trying to connect calculating server: {ex.Message}",
                     ContentType = "text/plain",
                     StatusCode = 500
@@ -57,14 +58,14 @@ namespace backend___central.Services
             }
         }
 
-        private async Task HandleCheckIfCanConnectToCalculatingServer(IPAddress ipAddress)
+        public async Task HandleCheckIfCanConnectToCalculatingServer(IPAddress ipAddress)
         {
             try
             {
                 using HttpClient httpClient = new();
                 httpClient.Timeout = TimeSpan.FromSeconds(30);
                 string serverUrl = $"http://{ipAddress}:5099/api/calculating/check-connection";
-                StringContent dictionaryHash = new (_dictionaryService.GetCurrentDictionaryHashResult());
+                StringContent dictionaryHash = new(_dictionaryService.GetCurrentDictionaryHashResult());
                 HttpResponseMessage httpResponseMessage = await httpClient.PostAsync(serverUrl, dictionaryHash);
                 if (!httpResponseMessage.IsSuccessStatusCode)
                 {
@@ -150,6 +151,11 @@ namespace backend___central.Services
             {
                 throw new Exception($"Server {ipAddress} responded with status code {response.StatusCode}");
             }
+        }
+
+        internal async Task HandleCheckIfCanConnectToCalculatingServer(string serverIpAddress)
+        {
+            throw new NotImplementedException();
         }
     }
 }
