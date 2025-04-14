@@ -1,0 +1,17 @@
+services:
+  password-cracker-database:
+    image: postgres:15
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./:/docker-entrypoint-initdb.d
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432" 
+    environment:
+      - POSTGRES_HOST_AUTH_METHOD=md5
+      - POSTGRES_LISTEN_ADDRESSES=*
+
+volumes:
+  postgres_data:

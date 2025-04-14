@@ -1,16 +1,3 @@
-[INFO] Calculating web server started at [2025-04-05 18:55:05.656]
-[INFO] Successfully connected to the PostgreSQL database instance at [2025-04-05 18:55:06.298]
-[INFO] Synchronizing dictionary with central server at [2025-04-05 18:55:06.517]
-[INFO] Created dictionary directory at [2025-04-05 18:55:06.522]
-[ERROR] No valid dictionary hash files found while trying to synchronize dictionary at [2025-04-05 18:55:06.536]
-[INFO] Successfully saved new dictionary. Size: 12 bytes at [2025-04-05 18:55:06.549]
-[INFO] Successfully connected to central server at [2025-04-05 18:55:06.585]
-[INFO] Calculating web server started at [2025-04-05 18:56:02.402]
-[INFO] Successfully connected to the PostgreSQL database instance at [2025-04-05 18:56:02.839]
-[INFO] Dictionary file '/App/dictionary/dictionary-E21B6C5BAE3D9C39-2025-04-05.txt' already exists. at [2025-04-05 18:56:03.014]
-[INFO] Successfully connected to central server at [2025-04-05 18:56:03.068]
-[INFO] Calculating web server started at [2025-04-05 18:57:00.612]
-[INFO] Successfully connected to the PostgreSQL database instance at [2025-04-05 18:57:01.140]
-[ERROR] An error occurred: Error to connect to central server: System.Exception: Cannot connect to central server with address 192.168.0.10. Status code: InternalServerError
-   at backend___calculating.Startup.ConnectWithCentralServer() in /App/Startup.cs:line 144 at [2025-04-05 18:57:01.396]
-[INFO] Stopped calculating server at [2025-04-05 18:57:01.401]
+version https://git-lfs.github.com/spec/v1
+oid sha256:25514b318f7e032f0397e41f4f617d0c70ce0082a5128f733c5b4920e6ba3244
+size 590
