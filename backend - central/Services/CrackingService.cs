@@ -40,8 +40,7 @@ namespace backend___central.Services
 
                 // Validate required fields
                 if (!root.TryGetProperty("passwordLength", out JsonElement passwordLengthElement) ||
-                    !root.TryGetProperty("userLogin", out JsonElement userLoginElement) ||
-                    !root.TryGetProperty("hostsCount", out JsonElement hostsCountElement))
+                    !root.TryGetProperty("userLogin", out JsonElement userLoginElement))
                 {
                     return new ContentResult
                     {
@@ -52,18 +51,22 @@ namespace backend___central.Services
                 }
 
                 // Extract values safely
-                if (!passwordLengthElement.TryGetInt32(out int passwordLength) ||
-                    !hostsCountElement.TryGetInt32(out int hostsCount))
+                if (!passwordLengthElement.TryGetInt32(out int passwordLength))
                 {
                     return new ContentResult
                     {
-                        Content = "Invalid request data. passwordLength or hostsCount must be integers.",
+                        Content = "Invalid request data. passwordLength must be an integer.",
                         ContentType = "text/plain",
                         StatusCode = 400
                     };
                 }
 
                 string userLogin = userLoginElement.GetString() ?? string.Empty;
+
+                // Get the number of hosts dynamically
+                int hostsCount = Startup.ServersIpAddresses.Count;
+
+                Console.WriteLine($"Number of hosts: {hostsCount}");
 
                 // Generate character portions based on granularity and hosts count
                 var allChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";

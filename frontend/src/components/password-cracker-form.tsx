@@ -22,7 +22,7 @@ import axios from "axios";
 import { BASE_URL } from "@/api";
 
 const formSchema = z.object({
-  username: z
+  userLogin: z
     .string()
     .min(2, { message: "Nazwa użytkownika musi mieć co najmniej 2 znaki." }),
   method: z.string(),
@@ -44,7 +44,7 @@ export default function PasswordCrackerForm() {
   const { control, handleSubmit, watch } = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      username: "user1",
+      userLogin: "user1",
       passwordLength: 6,
     },
   });
@@ -60,12 +60,12 @@ export default function PasswordCrackerForm() {
     try {
       if (data.method === "brute-force") {
         await axios.post(`${BASE_URL}/cracking/brute-force`, {
-          username: data.username,
+          userLogin: data.userLogin,
           passwordLength: data.passwordLength,
         });
       } else if (data.method === "słownikowa") {
         const formData = new FormData();
-        formData.append("username", data.username);
+        formData.append("userLogin", data.userLogin);
         if (data.dictionaryFile) {
           formData.append("file", data.dictionaryFile);
           await axios.post(`${BASE_URL}/synchronizing/dictionary`, formData, {
@@ -156,18 +156,18 @@ export default function PasswordCrackerForm() {
           <div className="space-y-2">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center">
               <Label
-                htmlFor="username"
+                htmlFor="userLogin"
                 className="text-blue-700 font-medium mb-2 sm:mb-0 sm:mr-4"
               >
                 Wprowadź login użytkownika
               </Label>
               <Controller
-                name="username"
+                name="userLogin"
                 control={control}
                 render={({ field }) => (
                   <Input
                     {...field}
-                    id="username"
+                    id="userLogin"
                     className="w-full sm:w-48 bg-gray-100"
                   />
                 )}
