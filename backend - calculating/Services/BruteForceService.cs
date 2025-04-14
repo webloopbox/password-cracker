@@ -49,7 +49,7 @@ namespace backend___calculating.Services
             else
             {
                 Console.WriteLine("Password not found in the given range.");
-                return new NotFoundObjectResult("Password not found in the given range.");
+                return new OkObjectResult(new { Message = "Password not found." });
             }
         }
 

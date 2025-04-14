@@ -26,8 +26,7 @@ namespace backend___calculating.Controllers
                 return BadRequest("HttpContext is null.");
             }
 
-            await bruteForceService.SynchronizeBruteForce(HttpContext);
-            return Ok("Synchronization completed.");
+            return await bruteForceService.SynchronizeBruteForce(HttpContext);
         }
     }
 }

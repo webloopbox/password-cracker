@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Net.Http;
 using System;
 using System.Linq;
+using System.Text.Json.Serialization;
 
 namespace backend___central.Services
 {
@@ -80,6 +81,7 @@ namespace backend___central.Services
 
                 Console.WriteLine($"Server IP Addresses: {string.Join(", ", Startup.ServersIpAddresses)}");
 
+                var tasks = new List<Task<(bool Success, string? Password, string ServerIp)>>();
                 for (int i = 0; i < Startup.ServersIpAddresses.Count; i++)
                 {
                     string serverIpAddress = Startup.ServersIpAddresses[i].ToString();
@@ -87,7 +89,6 @@ namespace backend___central.Services
 
                     Console.WriteLine($"Making request to --> http://{serverIpAddress}:5099/api/synchronizing/brute-force");
 
-                    // Prepare the payload for each host
                     var payload = new
                     {
                         passwordLength,
@@ -97,16 +98,67 @@ namespace backend___central.Services
 
                     string payloadJson = JsonSerializer.Serialize(payload);
 
-                    var response = await httpClient.PostAsync(
-                        $"http://{serverIpAddress}:5099/api/synchronizing/brute-force",
-                        new StringContent(payloadJson, System.Text.Encoding.UTF8, "application/json")
-                    );
-
-                    if (!response.IsSuccessStatusCode)
+                    tasks.Add(Task.Run(async () =>
                     {
-                        ILogService.LogError(logServices, $"Failed to synchronize with server {serverIpAddress}. Status code: {response.StatusCode}");
-                    }
+                        try
+                        {
+                            var response = await httpClient.PostAsync(
+                                $"http://{serverIpAddress}:5099/api/synchronizing/brute-force",
+                                new StringContent(payloadJson, System.Text.Encoding.UTF8, "application/json")
+                            );
+
+                            if (!response.IsSuccessStatusCode)
+                            {
+                                ILogService.LogError(logServices, $"Failed to synchronize with server {serverIpAddress}. Status code: {response.StatusCode}");
+                                return (Success: false, Password: null, ServerIp: serverIpAddress);
+                            }
+
+                            string responseContent = await response.Content.ReadAsStringAsync();
+                            try
+                            {
+                                var responseData = JsonSerializer.Deserialize<BruteForceResponse>(responseContent);
+                                if (responseData != null && responseData.Message == "Password found." && !string.IsNullOrEmpty(responseData.Password))
+                                {
+                                    ILogService.LogInfo(logServices, $"Password found by server {serverIpAddress}: {responseData.Password}");
+                                    return (Success: true, Password: responseData.Password, ServerIp: serverIpAddress);
+                                }
+                                else
+                                {
+                                    ILogService.LogInfo(logServices, $"No password found by server {serverIpAddress}.");
+                                    return (Success: false, Password: null, ServerIp: serverIpAddress);
+                                }
+                            }
+                            catch (JsonException ex)
+                            {
+                                ILogService.LogError(logServices, $"Failed to parse response from server {serverIpAddress}: {ex.Message}");
+                                return (Success: false, Password: null, ServerIp: serverIpAddress);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            ILogService.LogError(logServices, $"Error communicating with server {serverIpAddress}: {ex.Message}");
+                            return (Success: false, Password: null, ServerIp: serverIpAddress);
+                        }
+                    }));
                 }
+
+                var results = await Task.WhenAll(tasks);
+
+                var successfulResult = results.FirstOrDefault(r => r.Success);
+                if (successfulResult.Success)
+                {
+                    return new OkObjectResult(new
+                    {
+                        Message = "Password found.",
+                        Password = successfulResult.Password,
+                        Server = successfulResult.ServerIp
+                    });
+                }
+
+                return new OkObjectResult(new
+                {
+                    Message = "Password not found by any server."
+                });
             }
             catch (Exception ex)
             {
@@ -118,23 +170,27 @@ namespace backend___central.Services
                     StatusCode = 500
                 };
             }
-
-            return new ContentResult
-            {
-                Content = "Started brute force password cracking.",
-                StatusCode = 202
-            };
         }
+
         public IActionResult HandleDictionaryCracking(HttpContext httpContext)
         {
             ILogService.LogInfo(logServices, "Made request to crack password using dictionary method");
-            ILogService.LogInfo(logServices, "Final cracking time with dictionary method was: 01:34:10. Cracking was successfull.");
+            ILogService.LogInfo(logServices, "Final cracking time with dictionary method was: 01:34:10. Cracking was successful.");
 
             return new ContentResult
             {
                 Content = "Started dictionary password cracking.",
                 StatusCode = 202
             };
+        }
+
+        private class BruteForceResponse
+        {
+            [JsonPropertyName("Message")]
+            public string Message { get; set; }
+
+            [JsonPropertyName("Password")]
+            public string? Password { get; set; }
         }
     }
 }
