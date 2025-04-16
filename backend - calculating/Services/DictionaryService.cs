@@ -2,21 +2,34 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using backend___calculating.Models;
+using System.Security.Cryptography;
+using Npgsql;
+using DotNetEnv;
+
 
 namespace backend___calculating.Services
 {
     public class DictionaryService : IDictionaryService
     {
         private readonly IEnumerable<ILogService> logServices;
-        private string DictionaryDirectory { get; set; } = "";
-        private string[] DirectoryFiles { get; set; } = Array.Empty<string>();
+        private string DictionaryDirectory { get; set; }
+        private string[] DirectoryFiles { get; set; }
+        private readonly string connectionString;
 
         public DictionaryService(IEnumerable<ILogService> logServices)
         {
+            this.DictionaryDirectory = "";
+            this.DirectoryFiles = Array.Empty<string>();
             this.logServices = logServices;
+            Env.Load();
+            this.connectionString = Environment.GetEnvironmentVariable("POSTGRES_DB_CONNECTION_STRING") ??
+                throw new Exception("Database connection string not found in environment variables");
         }
 
         public async Task<ActionResult> SynchronizeDictionaryResult(HttpContext httpContext)
@@ -30,7 +43,8 @@ namespace backend___calculating.Services
                 IFormFile? iFormFile = iFormCollection.Files.GetFile("file");
                 HandleValidateFile(iFormFile);
                 string fileName = await HandleSaveFile(iFormFile);
-                return new ContentResult {
+                return new ContentResult
+                {
                     Content = $"Successfully synchronized dictionary. Filename: {Path.GetFileName(fileName)}.txt, Path: {DictionaryDirectory}",
                     ContentType = "text/plain",
                     StatusCode = 200
@@ -39,12 +53,155 @@ namespace backend___calculating.Services
             catch (Exception ex)
             {
                 ILogService.LogError(logServices, $"Error while synchronizing dictionary: {ex.Message}");
-                return new ContentResult {
+                return new ContentResult
+                {
                     Content = $"An error occurred while synchronizing dictionary pack file: {ex.Message}",
                     ContentType = "text/plain",
                     StatusCode = 500
                 };
             }
+        }
+
+        public async Task<ActionResult> StartCrackingResult(HttpContext httpContext)
+        {
+            try
+            {
+                ChunkInfo chunkInfo = await ReadAndDeserializeRequest(httpContext);
+                List<string> selectedPasswords = await ReadPasswordsFromDictionary(chunkInfo);
+                ValidateSelectedPasswords(selectedPasswords, chunkInfo);
+                await CheckPasswordsAgainstDatabase(selectedPasswords);
+                LogSuccessfulPasswordLoading(selectedPasswords, chunkInfo);
+                return CreateSuccessResponse(selectedPasswords, chunkInfo);
+            }
+            catch (Exception ex)
+            {
+                ILogService.LogError(logServices, $"Error while cracking using dictionary: {ex.Message}");
+                return CreateErrorResponse(ex.Message);
+            }
+        }
+
+        private async Task CheckPasswordsAgainstDatabase(List<string> passwords)
+        {
+            using NpgsqlConnection connection = new(connectionString);
+            await connection.OpenAsync();
+            int totalPasswords = passwords.Count;
+            int currentPassword = 0;
+            foreach (string password in passwords)
+            {
+                currentPassword++;
+                string hashedPassword = CalculateMD5Hash(password);
+                ILogService.LogInfo(logServices, 
+                    $"Checking password [{currentPassword}/{totalPasswords}]: '{password}' (MD5: {hashedPassword})");
+                using NpgsqlCommand command = new(
+                    "SELECT login FROM users WHERE password = @hash LIMIT 1",
+                    connection
+                );
+                command.Parameters.AddWithValue("@hash", hashedPassword);
+                using NpgsqlDataReader reader = await command.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
+                {
+                    string login = reader.GetString(0);
+                    ILogService.LogInfo(logServices,
+                        $"Password found! Login: {login}, Password: {password}, Hash: {hashedPassword}");
+                    throw new Exception($"Password cracked! Login: {login}, Password: {password}");
+                }
+                await reader.CloseAsync();
+            }
+        }
+
+        private static string CalculateMD5Hash(string input)
+        {
+            using MD5 md5 = MD5.Create();
+            byte[] inputBytes = Encoding.ASCII.GetBytes(input);
+            byte[] hashBytes = md5.ComputeHash(inputBytes);
+            StringBuilder sb = new();
+            for (int i = 0; i < hashBytes.Length; i++)
+            {
+                sb.Append(hashBytes[i].ToString("x2"));
+            }
+            return sb.ToString();
+        }
+
+        private async Task<ChunkInfo> ReadAndDeserializeRequest(HttpContext httpContext)
+        {
+            using StreamReader reader = new(httpContext.Request.Body);
+            string requestBody = await reader.ReadToEndAsync();
+            ChunkInfo chunkInfo = JsonSerializer.Deserialize<ChunkInfo>(requestBody)
+                ?? throw new Exception("Invalid chunk information received");
+            return chunkInfo;
+        }
+
+        private async Task<List<string>> ReadPasswordsFromDictionary(ChunkInfo chunkInfo)
+        {
+            DictionaryDirectory = Path.Combine(Directory.GetCurrentDirectory(), "dictionary");
+            SetDirectoryFiles();
+            string latestDictionaryHash = GetLatestDictionaryHash("dictionary cracking");
+            string dictionaryPath = Path.Combine(DictionaryDirectory, latestDictionaryHash);
+            if (!File.Exists(dictionaryPath))
+            {
+                throw new FileNotFoundException($"Dictionary file not found at path: {dictionaryPath}");
+            }
+            List<string> selectedPasswords = new List<string>();
+            using FileStream fileStream = new FileStream(dictionaryPath, FileMode.Open, FileAccess.Read);
+            using StreamReader streamReader = new StreamReader(fileStream);
+            await SkipLinesToStartPosition(streamReader, chunkInfo.StartLine);
+            await ReadRequiredLines(streamReader, selectedPasswords, chunkInfo);
+            ILogService.LogInfo(logServices, "Started cracking password ussing dictionary pack");
+            return selectedPasswords;
+        }
+
+        private async Task SkipLinesToStartPosition(StreamReader streamReader, int startLine)
+        {
+            int currentLine = 0;
+            while (currentLine < startLine - 1 && await streamReader.ReadLineAsync() != null)
+            {
+                currentLine++;
+            }
+        }
+
+        private async Task ReadRequiredLines(StreamReader streamReader, List<string> selectedPasswords, ChunkInfo chunkInfo)
+        {
+            int currentLine = chunkInfo.StartLine - 1;
+            string? line;
+            while ((line = await streamReader.ReadLineAsync()) != null && currentLine < chunkInfo.EndLine)
+            {
+                currentLine++;
+                selectedPasswords.Add(line);
+            }
+        }
+
+        private void ValidateSelectedPasswords(List<string> selectedPasswords, ChunkInfo chunkInfo)
+        {
+            if (selectedPasswords.Count == 0)
+            {
+                throw new Exception($"No words found between lines {chunkInfo.StartLine} and {chunkInfo.EndLine}");
+            }
+        }
+
+        private void LogSuccessfulPasswordLoading(List<string> selectedPasswords, ChunkInfo chunkInfo)
+        {
+            ILogService.LogInfo(logServices,
+                $"Successfully loaded {selectedPasswords.Count} words from dictionary (lines {chunkInfo.StartLine}-{chunkInfo.EndLine})");
+        }
+
+        private ContentResult CreateSuccessResponse(List<string> selectedPasswords, ChunkInfo chunkInfo)
+        {
+            return new ContentResult
+            {
+                Content = $"Started dictionary cracking with {selectedPasswords.Count} words from lines {chunkInfo.StartLine}-{chunkInfo.EndLine}",
+                ContentType = "text/plain",
+                StatusCode = 202
+            };
+        }
+
+        private ContentResult CreateErrorResponse(string errorMessage)
+        {
+            return new ContentResult
+            {
+                Content = $"An error occurred while cracking using dictionary: {errorMessage}",
+                ContentType = "text/plain",
+                StatusCode = 500
+            };
         }
 
         private async Task<string> HandleSaveFile(IFormFile? iFormFile)
@@ -70,12 +227,12 @@ namespace backend___calculating.Services
                 ILogService.LogInfo(logServices, $"Dictionary file '{dictionaryLocation}' already exists. Skipping save.");
                 return dictionaryLocation;
             }
-            using (FileStream fileStream = new (dictionaryLocation, FileMode.CreateNew, FileAccess.Write))
+            using (FileStream fileStream = new(dictionaryLocation, FileMode.CreateNew, FileAccess.Write))
             {
                 await iFormFile.CopyToAsync(fileStream);
                 await fileStream.FlushAsync();
             }
-            FileInfo fileInfo = new (dictionaryLocation);
+            FileInfo fileInfo = new(dictionaryLocation);
             if (fileInfo.Length == 0)
             {
                 File.Delete(dictionaryLocation);
@@ -113,7 +270,7 @@ namespace backend___calculating.Services
                 if (iFormFile != null)
                 {
                     string centralLatestDictionaryHash = iFormFile.FileName;
-                    string calculatingLatestDictionaryHash = GetLatestDictionaryHash();
+                    string calculatingLatestDictionaryHash = GetLatestDictionaryHash("synchronizing dictionary");
                     return calculatingLatestDictionaryHash.Equals(centralLatestDictionaryHash);
                 }
                 return false;
@@ -124,7 +281,18 @@ namespace backend___calculating.Services
             }
         }
 
-        private string GetLatestDictionaryHash()
+        private void SetDirectoryFiles()
+        {
+            string[] directoryFiles = Directory.GetFiles(DictionaryDirectory);
+            if (directoryFiles.Length <= 0)
+            {
+                ILogService.LogError(logServices, $"No files found in directory path while trying to start dictionary cracking");
+                throw new Exception("No files found in directory path.");
+            }
+            DirectoryFiles = directoryFiles;
+        }
+
+        private string GetLatestDictionaryHash(string operation)
         {
             FileInfo? latestFile = DirectoryFiles
                 .Select(file => new FileInfo(file))
@@ -132,7 +300,7 @@ namespace backend___calculating.Services
                 .FirstOrDefault();
             if (latestFile == null)
             {
-                ILogService.LogError(logServices, $"No valid dictionary hash files found while trying to synchronize dictionary");
+                ILogService.LogError(logServices, $"No valid dictionary hash files found while trying to ${operation} dictionary");
                 throw new Exception("No valid dictionary hash files found.");
             }
             string fileName = latestFile.Name;

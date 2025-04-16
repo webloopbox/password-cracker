@@ -8,17 +8,17 @@ namespace backend___central.Controllers
     [Route("api/calculating-server")]
     public class CheckController : ControllerBase
     {
-        private readonly ICheckService calculatingServerService;
+        private readonly ICheckService checkService;
 
-        public CheckController(ICheckService calculatingServerService)
+        public CheckController(ICheckService checkService)
         {
-            this.calculatingServerService = calculatingServerService;
+            this.checkService = checkService;
         }
 
         [HttpPost("connect")]
         public async Task<IActionResult> ConnectToCentralServer()
         {
-            return await calculatingServerService.HandleConnectToCentralServerRequest(HttpContext);
+            return await checkService.HandleConnectToCentralServerRequest(HttpContext);
         }
     }
 }

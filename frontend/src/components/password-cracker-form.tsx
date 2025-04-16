@@ -71,6 +71,7 @@ export default function PasswordCrackerForm() {
 				formData.append("username", data.username);
 				formData.append("hosts", data.hosts.toString());
 				if (data.dictionaryFile) {
+					console.log("idzie");
 					formData.append("file", data.dictionaryFile);
 					await axios.post(`${BASE_URL}/synchronizing/dictionary`, formData, {
 						headers: {
