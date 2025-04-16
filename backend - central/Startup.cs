@@ -15,7 +15,7 @@ namespace backend___central {
         private IEnumerable<ILogService>? logServices;
         public static bool IsDatabaseRunning { get; private set; } = false;
         public static List<IPAddress> ServersIpAddresses { get; set; } = new List<IPAddress>();
-
+        public static int Granularity { get; set; } = 100;
         public IConfiguration Configuration { get; }
 
         public Startup(IConfiguration configuration)

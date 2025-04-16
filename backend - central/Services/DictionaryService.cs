@@ -14,12 +14,15 @@ namespace backend___central.Services
     public class DictionaryService : IDictionaryService
     {
         private readonly IEnumerable<ILogService> logServices;
-        private string Operation { get; set; } = "";
-        public string DictionaryDirectory { get; set; } = "";
-        private string[] DirectoryFiles { get; set; } = Array.Empty<string>();
+        private string Operation { get; set; }
+        public string DictionaryDirectory { get; set; }
+        private string[] DirectoryFiles { get; set; }
 
         public DictionaryService(IEnumerable<ILogService> logServices)
         {
+            this.Operation = "";
+            this.DictionaryDirectory = "";
+            this.DirectoryFiles = Array.Empty<string>();
             this.logServices = logServices;
         }
 
@@ -159,7 +162,7 @@ namespace backend___central.Services
                 await iFormFile.CopyToAsync(memoryStream);
                 memoryStream.Position = 0;
                 using MultipartFormDataContent formData = CreateFormData(memoryStream, fileName);
-                string serverUrl = $"http://{connectedServer}:5099/api/synchronizing/dictionary";
+                string serverUrl = $"http://{connectedServer}:5099/api/dictionary/synchronizing";
                 HttpResponseMessage response = await httpClient.PostAsync(serverUrl, formData);
                 if (!response.IsSuccessStatusCode)
                 {
