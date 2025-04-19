@@ -12,7 +12,6 @@ using System.Security.Cryptography;
 using Npgsql;
 using DotNetEnv;
 
-
 namespace backend___calculating.Services
 {
     public class DictionaryService : IDictionaryService
@@ -24,11 +23,11 @@ namespace backend___calculating.Services
 
         public DictionaryService(IEnumerable<ILogService> logServices)
         {
-            this.DictionaryDirectory = "";
-            this.DirectoryFiles = Array.Empty<string>();
+            DictionaryDirectory = "";
+            DirectoryFiles = Array.Empty<string>();
             this.logServices = logServices;
             Env.Load();
-            this.connectionString = Environment.GetEnvironmentVariable("POSTGRES_DB_CONNECTION_STRING") ??
+            connectionString = Environment.GetEnvironmentVariable("POSTGRES_DB_CONNECTION_STRING") ??
                 throw new Exception("Database connection string not found in environment variables");
         }
 
@@ -66,26 +65,29 @@ namespace backend___calculating.Services
         {
             try
             {
-                ChunkInfo chunkInfo = await ReadAndDeserializeRequest(httpContext);
+                var (username, chunkInfo) = await ReadAndDeserializeRequest(httpContext);
                 List<string> selectedPasswords = await ReadPasswordsFromDictionary(chunkInfo);
                 ValidateSelectedPasswords(selectedPasswords, chunkInfo);
-                await CheckPasswordsAgainstDatabase(selectedPasswords);
+                await CheckPasswordsAgainstDatabase(selectedPasswords, username);
                 LogSuccessfulPasswordLoading(selectedPasswords, chunkInfo);
-                return CreateSuccessResponse(selectedPasswords, chunkInfo);
+                return SuccessResponse("Password not found!");
             }
             catch (Exception ex)
             {
+                if (ex.Message.Contains("Password found!")) {
+                    return SuccessResponse(ex.Message);
+                }
                 ILogService.LogError(logServices, $"Error while cracking using dictionary: {ex.Message}");
                 return CreateErrorResponse(ex.Message);
             }
         }
 
-        private async Task CheckPasswordsAgainstDatabase(List<string> passwords)
+        private async Task CheckPasswordsAgainstDatabase(List<string> passwords, string username)
         {
+            int currentPassword = 0;
+            int totalPasswords = passwords.Count;
             using NpgsqlConnection connection = new(connectionString);
             await connection.OpenAsync();
-            int totalPasswords = passwords.Count;
-            int currentPassword = 0;
             foreach (string password in passwords)
             {
                 currentPassword++;
@@ -93,17 +95,18 @@ namespace backend___calculating.Services
                 ILogService.LogInfo(logServices, 
                     $"Checking password [{currentPassword}/{totalPasswords}]: '{password}' (MD5: {hashedPassword})");
                 using NpgsqlCommand command = new(
-                    "SELECT login FROM users WHERE password = @hash LIMIT 1",
+                    "SELECT login FROM users WHERE LOWER(login) = LOWER(@username) AND password = @hash LIMIT 1",
                     connection
                 );
                 command.Parameters.AddWithValue("@hash", hashedPassword);
+                command.Parameters.AddWithValue("@username", username);
                 using NpgsqlDataReader reader = await command.ExecuteReaderAsync();
                 if (await reader.ReadAsync())
                 {
                     string login = reader.GetString(0);
                     ILogService.LogInfo(logServices,
                         $"Password found! Login: {login}, Password: {password}, Hash: {hashedPassword}");
-                    throw new Exception($"Password cracked! Login: {login}, Password: {password}");
+                    throw new Exception($"Password found! Login: {login}, Password: {password}");
                 }
                 await reader.CloseAsync();
             }
@@ -122,13 +125,29 @@ namespace backend___calculating.Services
             return sb.ToString();
         }
 
-        private async Task<ChunkInfo> ReadAndDeserializeRequest(HttpContext httpContext)
+        private async Task<(string username, ChunkInfo chunkInfo)> ReadAndDeserializeRequest(HttpContext httpContext)
         {
             using StreamReader reader = new(httpContext.Request.Body);
-            string requestBody = await reader.ReadToEndAsync();
-            ChunkInfo chunkInfo = JsonSerializer.Deserialize<ChunkInfo>(requestBody)
-                ?? throw new Exception("Invalid chunk information received");
-            return chunkInfo;
+            string jsonBody = await reader.ReadToEndAsync();
+            try 
+            {
+                Dictionary<string, JsonElement> request = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(jsonBody)
+                    ?? throw new Exception("Request body is empty");
+                if (!request.TryGetValue("username", out var usernameElement))
+                    throw new Exception("Username not found in request");
+                if (!request.TryGetValue("chunk", out var chunkElement))
+                    throw new Exception("Chunk information not found in request");
+                string username = usernameElement.GetString() 
+                    ?? throw new Exception("Invalid username format");
+                ChunkInfo chunkInfo = JsonSerializer.Deserialize<ChunkInfo>(chunkElement.GetRawText())
+                    ?? throw new Exception("Invalid chunk information format");
+                ILogService.LogInfo(logServices, $"Received request for user: {username} with chunk: {chunkInfo.StartLine}-{chunkInfo.EndLine}");
+                return (username, chunkInfo);
+            }
+            catch (JsonException ex)
+            {
+                throw new Exception($"Invalid JSON format: {ex.Message}");
+            }
         }
 
         private async Task<List<string>> ReadPasswordsFromDictionary(ChunkInfo chunkInfo)
@@ -141,16 +160,16 @@ namespace backend___calculating.Services
             {
                 throw new FileNotFoundException($"Dictionary file not found at path: {dictionaryPath}");
             }
-            List<string> selectedPasswords = new List<string>();
-            using FileStream fileStream = new FileStream(dictionaryPath, FileMode.Open, FileAccess.Read);
-            using StreamReader streamReader = new StreamReader(fileStream);
+            List<string> selectedPasswords = new();
+            using FileStream fileStream = new(dictionaryPath, FileMode.Open, FileAccess.Read);
+            using StreamReader streamReader = new(fileStream);
             await SkipLinesToStartPosition(streamReader, chunkInfo.StartLine);
             await ReadRequiredLines(streamReader, selectedPasswords, chunkInfo);
             ILogService.LogInfo(logServices, "Started cracking password ussing dictionary pack");
             return selectedPasswords;
         }
 
-        private async Task SkipLinesToStartPosition(StreamReader streamReader, int startLine)
+        private static async Task SkipLinesToStartPosition(StreamReader streamReader, int startLine)
         {
             int currentLine = 0;
             while (currentLine < startLine - 1 && await streamReader.ReadLineAsync() != null)
@@ -159,7 +178,7 @@ namespace backend___calculating.Services
             }
         }
 
-        private async Task ReadRequiredLines(StreamReader streamReader, List<string> selectedPasswords, ChunkInfo chunkInfo)
+        private static async Task ReadRequiredLines(StreamReader streamReader, List<string> selectedPasswords, ChunkInfo chunkInfo)
         {
             int currentLine = chunkInfo.StartLine - 1;
             string? line;
@@ -170,7 +189,7 @@ namespace backend___calculating.Services
             }
         }
 
-        private void ValidateSelectedPasswords(List<string> selectedPasswords, ChunkInfo chunkInfo)
+        private static void ValidateSelectedPasswords(List<string> selectedPasswords, ChunkInfo chunkInfo)
         {
             if (selectedPasswords.Count == 0)
             {
@@ -184,17 +203,17 @@ namespace backend___calculating.Services
                 $"Successfully loaded {selectedPasswords.Count} words from dictionary (lines {chunkInfo.StartLine}-{chunkInfo.EndLine})");
         }
 
-        private ContentResult CreateSuccessResponse(List<string> selectedPasswords, ChunkInfo chunkInfo)
+        private static ContentResult SuccessResponse(string responseContent)
         {
             return new ContentResult
             {
-                Content = $"Started dictionary cracking with {selectedPasswords.Count} words from lines {chunkInfo.StartLine}-{chunkInfo.EndLine}",
+                Content = responseContent,
                 ContentType = "text/plain",
-                StatusCode = 202
+                StatusCode = 200
             };
         }
 
-        private ContentResult CreateErrorResponse(string errorMessage)
+        private static ContentResult CreateErrorResponse(string errorMessage)
         {
             return new ContentResult
             {
