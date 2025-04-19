@@ -1,27 +1,28 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.IO;
-using System.Net.Http;
-using System.Text;
-using System.Text.Json;
-using System.Net;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using backend___central.Models;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System;
+using System.Linq;
 
 namespace backend___central.Services
 {
     public class CrackingService : ICrackingService
     {
-        private readonly IEnumerable<ILogService> logServices;
         private volatile bool passwordFound;
+        private readonly IEnumerable<ILogService> logServices;
+        private readonly ChunkManagerService chunkManager;
+        private readonly ServerManagerService serverManager;
+        private readonly TaskCoordinatorService taskCoordinator;
 
         public CrackingService(IEnumerable<ILogService> logServices)
         {
+            passwordFound = false;
             this.logServices = logServices;
-            this.passwordFound = false;
+            chunkManager = new ChunkManagerService(logServices);
+            serverManager = new ServerManagerService(logServices);
+            taskCoordinator = new TaskCoordinatorService(logServices);
         }
 
         public IActionResult HandleBruteForceCracking(HttpContext httpContext)
@@ -39,19 +40,20 @@ namespace backend___central.Services
         {
             try
             {
-                ValidateServersAvailability();
-                int totalLines = await GetDictionaryTotalLines();
-                List<CalculatingServerState> calculatingServerStates = InitializeServerStates();
                 int currentLine = 1;
+                string username = await ExtractUsername(httpContext);
+                int totalLines = await chunkManager.GetDictionaryTotalLines();
+                serverManager.ValidateServersAvailability();
+                List<CalculatingServerState> serverStates = serverManager.InitializeServerStates();
                 while (currentLine <= totalLines && !passwordFound)
                 {
-                    List<CalculatingServerState> availableServers = GetAvailableServers(calculatingServerStates);
-                    if (availableServers.Count == 0)
+                    List<CalculatingServerState> availableServers = serverManager.GetAvailableServers(serverStates);
+                    if (!availableServers.Any())
                     {
                         await HandleNoAvailableServers();
                         continue;
                     }
-                    currentLine = await ProcessAvailableServers(availableServers, currentLine, totalLines);
+                    currentLine = await ProcessServers(availableServers, currentLine, totalLines, username);
                 }
                 return CreateFinalResponse();
             }
@@ -61,78 +63,65 @@ namespace backend___central.Services
             }
         }
 
-        private void ValidateServersAvailability()
+        private static async Task<string> ExtractUsername(HttpContext httpContext)
         {
-            if (Startup.ServersIpAddresses.Count == 0)
+            IFormCollection form = await httpContext.Request.ReadFormAsync();
+            return form["username"].ToString() ??
+                throw new ArgumentException("Username is required");
+        }
+
+        private async Task<int> ProcessServers(List<CalculatingServerState> servers, int currentLine, int totalLines, string username)
+        {
+            taskCoordinator.ResetState();
+            while (currentLine <= totalLines && !passwordFound)
             {
-                throw new Exception("No calculating servers available");
-            }
-        }
-
-        private List<CalculatingServerState> InitializeServerStates()
-        {
-            return Startup.ServersIpAddresses
-                .Select(ip => new CalculatingServerState(ip))
-                .ToList();
-        }
-
-        private List<CalculatingServerState> GetAvailableServers(List<CalculatingServerState> serverStates)
-        {
-            return serverStates.Where(server => !server.IsBusy).ToList();
-        }
-
-        private async Task<int> ProcessAvailableServers(List<CalculatingServerState> availableServers, int currentLine, int totalLines)
-        {
-            foreach (CalculatingServerState server in availableServers)
-            {
-                if (currentLine > totalLines || passwordFound)
+                foreach (CalculatingServerState server in servers.ToList())
+                {
+                    if (!taskCoordinator.CanProcessServer(server))
+                        continue;
+                    if (currentLine > totalLines || passwordFound)
+                        break;
+                    try
+                    {
+                        currentLine = AssignChunkToServer(server, currentLine, totalLines, username);
+                    }
+                    catch (Exception ex)
+                    {
+                        HandleServerAssignmentError(server, servers, ex);
+                    }
+                }
+                if (await taskCoordinator.ProcessCompletedTasks())
+                {
+                    passwordFound = true;
                     break;
-                object chunk = CreateChunk(currentLine, totalLines);
-                server.IsBusy = true;
-                try
-                {
-                    await ProcessChunkAsync(server.IpAddress, chunk, server);
                 }
-                catch (Exception ex) when (ex.Message.Contains("Password cracked!"))
-                {
-                    HandlePasswordFoundException(ex);
-                    throw;
-                }
-                catch (Exception)
-                {
-                    HandleServerError(server);
-                    continue;
-                }
-                currentLine += Startup.Granularity;
             }
+            if (passwordFound)
+                taskCoordinator.CancelAllTasks();
             return currentLine;
         }
 
-        private object CreateChunk(int currentLine, int totalLines)
+        private int AssignChunkToServer(CalculatingServerState server, int currentLine, int totalLines, string username)
         {
-            return new
-            {
-                StartLine = currentLine,
-                EndLine = Math.Min(currentLine + Startup.Granularity - 1, totalLines)
-            };
+            object chunk = chunkManager.CreateChunk(currentLine, totalLines);
+            server.IsBusy = true;
+            taskCoordinator.AddServerTask(server, chunk, username);
+            currentLine += Startup.Granularity;
+            ILogService.LogInfo(logServices,
+                $"Assigned chunk {currentLine - Startup.Granularity}-{currentLine} to server {server.IpAddress}");
+            return currentLine;
         }
 
-        private void HandlePasswordFoundException(Exception ex)
+        private void HandleServerAssignmentError(CalculatingServerState server, List<CalculatingServerState> servers, Exception ex)
         {
-            passwordFound = true;
-            ILogService.LogInfo(logServices, ex.Message);
-        }
-
-        private void HandleServerError(CalculatingServerState server)
-        {
+            ILogService.LogError(logServices,
+                $"Failed to assign chunk to server {server.IpAddress}: {ex.Message}");
+            serverManager.MarkServerAsFailed(server);
             server.IsBusy = false;
-            if (Startup.ServersIpAddresses.Count == 0)
-            {
-                throw new Exception("All calculating servers have failed. Stopping dictionary cracking.");
-            }
+            servers.Remove(server);
         }
 
-        private async Task HandleNoAvailableServers()
+        private static async Task HandleNoAvailableServers()
         {
             if (Startup.ServersIpAddresses.Count == 0)
             {
@@ -161,92 +150,6 @@ namespace backend___central.Services
                 ContentType = "text/plain",
                 StatusCode = 500
             };
-        }
-
-        private async Task ProcessChunkAsync(IPAddress serverIp, object chunk, CalculatingServerState serverState)
-        {
-            try
-            {
-                using HttpClient httpClient = new HttpClient();
-                httpClient.Timeout = TimeSpan.FromSeconds(30);
-                StringContent content = new StringContent(
-                    JsonSerializer.Serialize(chunk),
-                    Encoding.UTF8,
-                    "application/json"
-                );
-                HttpResponseMessage response = await SendRequestToCalculatingServer(httpClient, serverIp, content);
-                string responseContent = await response.Content.ReadAsStringAsync();
-                HandleServerResponse(response, responseContent, serverIp);
-            }
-            finally
-            {
-                serverState.IsBusy = false;
-            }
-        }
-
-        private async Task<HttpResponseMessage> SendRequestToCalculatingServer(HttpClient httpClient, IPAddress serverIp, StringContent content)
-        {
-            return await httpClient.PostAsync(
-                $"http://{serverIp}:5099/api/dictionary/cracking",
-                content
-            );
-        }
-
-        private void HandleServerResponse(HttpResponseMessage response, string responseContent, IPAddress serverIp)
-        {
-            if (!response.IsSuccessStatusCode)
-            {
-                RemoveFailedServer(serverIp);
-                throw new Exception($"Server {serverIp} responded with status code {response.StatusCode}");
-            }
-            if (responseContent.Contains("Password cracked!"))
-            {
-                passwordFound = true;
-                throw new Exception(responseContent);
-            }
-            ILogService.LogInfo(logServices,
-                $"Server {serverIp} completed chunk processing: {responseContent}");
-        }
-
-        private void RemoveFailedServer(IPAddress serverIp)
-        {
-            if (Startup.ServersIpAddresses.Contains(serverIp))
-            {
-                Startup.ServersIpAddresses.Remove(serverIp);
-                ILogService.LogInfo(logServices,
-                    $"Removed failed server {serverIp} from active servers. Remaining servers: {Startup.ServersIpAddresses.Count}");
-            }
-        }
-        
-        private async Task<int> GetDictionaryTotalLines()
-        {
-            try
-            {
-                string dictionaryPath = Path.Combine(Directory.GetCurrentDirectory(), "dictionary");
-                DirectoryInfo directory = new DirectoryInfo(dictionaryPath);
-                if (!directory.Exists)
-                {
-                    throw new DirectoryNotFoundException($"Dictionary directory not found at: {dictionaryPath}");
-                }
-                FileInfo latestFile = directory.GetFiles()
-                    .OrderByDescending(f => f.CreationTime)
-                    .FirstOrDefault() ?? throw new FileNotFoundException("No dictionary files found");
-                int lineCount = 0;
-                using (StreamReader reader = new StreamReader(latestFile.FullName))
-                {
-                    while (await reader.ReadLineAsync() != null)
-                    {
-                        lineCount++;
-                    }
-                }
-                ILogService.LogInfo(logServices, $"Dictionary contains {lineCount} lines");
-                return lineCount;
-            }
-            catch (Exception ex)
-            {
-                ILogService.LogError(logServices, $"Error counting dictionary lines: {ex.Message}");
-                throw new Exception($"Failed to get dictionary total lines: {ex.Message}", ex);
-            }
         }
     }
 }

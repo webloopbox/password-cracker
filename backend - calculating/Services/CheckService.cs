@@ -14,7 +14,7 @@ namespace backend___calculating.Services {
             this.logServices = logServices;
         }
 
-        public IActionResult HandleCheckConnectionRequest(HttpContext httpContext) 
+        public IActionResult HandleCheckDictionaryHashRequest(HttpContext httpContext) 
         {
             try 
             {

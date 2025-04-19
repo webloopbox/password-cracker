@@ -68,7 +68,7 @@ namespace backend___central.Services
             {
                 using HttpClient httpClient = new();
                 httpClient.Timeout = TimeSpan.FromSeconds(30);
-                string serverUrl = $"http://{ipAddress}:5099/api/calculating/check-connection";
+                string serverUrl = $"http://{ipAddress}:5099/api/calculating/check-dictionary-hash";
                 StringContent dictionaryHash = new (_dictionaryService.GetCurrentDictionaryHashResult());
                 HttpResponseMessage httpResponseMessage = await httpClient.PostAsync(serverUrl, dictionaryHash);
                 if (!httpResponseMessage.IsSuccessStatusCode)
