@@ -122,9 +122,9 @@ namespace backend___calculating.Services
                     return combination;
                 }
                 // Limit logging to avoid flooding, but allow enough to diagnose
-                if (combinationCount >= 1000)
+                if (combinationCount >= 10000)
                 {
-                    Console.WriteLine("Stopping after 1000 combinations for debugging");
+                    Console.WriteLine("Stopping after 10 000 combinations for debugging");
                     break;
                 }
             }

@@ -77,7 +77,7 @@ namespace backend___central.Services
                                              .ToList();
 
                 using HttpClient httpClient = new();
-                httpClient.Timeout = TimeSpan.FromSeconds(30);
+                httpClient.Timeout = TimeSpan.FromHours(2);
 
                 Console.WriteLine($"Server IP Addresses: {string.Join(", ", Startup.ServersIpAddresses)}");
 
@@ -155,7 +155,7 @@ namespace backend___central.Services
                     });
                 }
 
-                return new OkObjectResult(new
+                return new NotFoundObjectResult(new
                 {
                     Message = "Password not found by any server."
                 });

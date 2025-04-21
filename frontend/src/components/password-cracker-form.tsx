@@ -1,5 +1,3 @@
-"use client";
-
 import type React from "react";
 
 import { useState, useRef } from "react";
@@ -50,6 +48,8 @@ export default function PasswordCrackerForm() {
   });
   const [dialogOpen, setDialogOpen] = useState<boolean>(false);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [responseMessage, setResponseMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const methodSelected = watch("method");
@@ -57,12 +57,17 @@ export default function PasswordCrackerForm() {
   const onSubmit: SubmitHandler<FormData> = async (data) => {
     console.log(data);
 
+    setDialogOpen(true);
+    setIsLoading(true);
+
     try {
+      let response;
       if (data.method === "brute-force") {
-        await axios.post(`${BASE_URL}/cracking/brute-force`, {
+        response = await axios.post(`${BASE_URL}/cracking/brute-force`, {
           userLogin: data.userLogin,
           passwordLength: data.passwordLength,
         });
+        console.log(123);
       } else if (data.method === "słownikowa") {
         const formData = new FormData();
         formData.append("userLogin", data.userLogin);
@@ -74,22 +79,37 @@ export default function PasswordCrackerForm() {
             },
           });
         }
-        await axios.post(`${BASE_URL}/cracking/dictionary`, formData, {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        });
+        response = await axios.post(
+          `${BASE_URL}/cracking/dictionary`,
+          formData,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+          }
+        );
       }
 
+      setResponseMessage(
+        response?.data?.message || "Żądanie zostało wysłane pomyślnie!"
+      ); // Set response message
       toast("Żądanie zostało wysłane pomyślnie!", {
         style: { background: "green", color: "white" },
       });
-      setDialogOpen(true);
     } catch (error) {
-      console.error(error);
-      toast("Wystąpił błąd podczas wysyłania żądania.", {
-        style: { background: "red", color: "white" },
-      });
+      if (axios.isAxiosError(error)) {
+        if (error.response) {
+          setResponseMessage(error.response.data.message || "Wystąpił błąd.");
+        } else if (error.request) {
+          console.error("No response received:", error.request);
+          setResponseMessage("Brak odpowiedzi z serwera.");
+        } else {
+          console.error("Error setting up request:", error.message);
+          setResponseMessage("Wystąpił błąd podczas wysyłania żądania.");
+        }
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -300,7 +320,12 @@ export default function PasswordCrackerForm() {
         </div>
       </form>
 
-      <PasswordCrackerDialog open={dialogOpen} setOpen={setDialogOpen} />
+      <PasswordCrackerDialog
+        open={dialogOpen}
+        setOpen={setDialogOpen}
+        responseMessage={responseMessage}
+        isLoading={isLoading}
+      />
     </>
   );
 }
