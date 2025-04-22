@@ -135,7 +135,7 @@ namespace backend___central.Services
                                 if (responseData != null && responseData.Message == "Password found." && !string.IsNullOrEmpty(responseData.Password))
                                 {
                                     ILogService.LogInfo(logServices, $"Password found by server {serverIpAddress}: {responseData.Password}");
-                                    return (Success: true, Password: responseData.Password, ServerIp: serverIpAddress);
+                                    return (Success: true, responseData.Password, ServerIp: serverIpAddress);
                                 }
                                 else
                                 {
