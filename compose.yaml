@@ -18,6 +18,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - "./backend - central:/App"
+      - ".env:/App/.env"
     env_file:
       - .env
     ports:

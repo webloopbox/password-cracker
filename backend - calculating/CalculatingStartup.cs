@@ -25,7 +25,7 @@ namespace backend___calculating
 
         public CalculatingStartup(IConfiguration configuration)
         {
-            Env.Load(".env");
+            Env.Load("../.env");
             Configuration = configuration;
         }
 
@@ -125,7 +125,7 @@ namespace backend___calculating
         {
             try
             {
-                Env.Load(".env");
+                Env.Load("../.env");
                 string? centralServerIp = Env.GetString("CENTRAL_SERVER_IP");
                 string? calculatingServerIp = Env.GetString("CALCULATING_SERVER_IP");
                 if (string.IsNullOrEmpty(centralServerIp))

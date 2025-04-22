@@ -22,7 +22,7 @@ namespace backend___central
 
         public Startup(IConfiguration configuration)
         {
-            Env.Load(".env");
+            Env.Load("../.env");
             Configuration = configuration;
         }
 
