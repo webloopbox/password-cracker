@@ -5,19 +5,18 @@ export const PasswordCrackerDialog = ({
   open,
   setOpen,
   responseMessage,
-  isLoading, // Accept the isLoading prop
+  isLoading,
 }: {
   open: boolean;
   setOpen: (open: boolean) => void;
   responseMessage: string | null;
-  isLoading: boolean; // Add isLoading prop type
+  isLoading: boolean;
 }) => {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader className="relative">
           <DialogTitle>Łamanie hasła</DialogTitle>{" "}
-          {/* Add DialogTitle for accessibility */}
           <button
             className="absolute right-2 top-2 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none"
             onClick={() => setOpen(false)}
