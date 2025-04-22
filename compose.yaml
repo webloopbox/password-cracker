@@ -22,22 +22,8 @@ services:
       - .env
     ports:
       - "5098:5098"
-    depends_on:
-      - password-cracker-database
     networks:
       - password-cracker-network
-
-  password-cracker-database:
-    image: postgres:15
-    restart: always
-    env_file:
-      - .env
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    networks:
-      - password-cracker-network
-    ports:
-      - "5432:5432"
 
 networks:
   password-cracker-network:

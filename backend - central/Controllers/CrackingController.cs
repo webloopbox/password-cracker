@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
+using System.Threading.Tasks;
 using backend___central.Services;
 using System.Threading.Tasks;
+using System;
 
 namespace backend___central.Controllers
 {
@@ -22,9 +24,9 @@ namespace backend___central.Controllers
         }
 
         [HttpPost("dictionary")]
-        public IActionResult CrackDictionary()
+        public async Task<IActionResult> CrackDictionary()
         {
-            return crackingService.HandleDictionaryCracking(HttpContext);
+            return await crackingService.HandleDictionaryCracking(HttpContext);
         }
     }
 }

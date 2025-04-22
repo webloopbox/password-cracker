@@ -7,5 +7,6 @@ namespace backend___calculating.Services
     public interface IDictionaryService
     {
         Task<ActionResult> SynchronizeDictionaryResult(HttpContext httpContext);
+        Task<ActionResult> StartCrackingResult(HttpContext httpContext);
     }
 }

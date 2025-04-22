@@ -20,7 +20,7 @@ import axios from "axios";
 import { BASE_URL } from "@/api";
 
 const formSchema = z.object({
-  userLogin: z
+  username: z
     .string()
     .min(2, { message: "Nazwa użytkownika musi mieć co najmniej 2 znaki." }),
   method: z.string(),
@@ -28,6 +28,7 @@ const formSchema = z.object({
     .number()
     .gte(5, "Hasło musi mieć co najmniej 6 znaków.")
     .optional(),
+  hosts: z.coerce.number().gte(2, "Liczba hostów musi być większa od 1."),
   dictionaryFile: z
     .instanceof(File)
     .refine((file) => file.name.endsWith(".txt"), {
@@ -42,7 +43,7 @@ export default function PasswordCrackerForm() {
   const { control, handleSubmit, watch } = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      userLogin: "user1",
+      username: "user1",
       passwordLength: 6,
     },
   });
@@ -55,8 +56,6 @@ export default function PasswordCrackerForm() {
   const methodSelected = watch("method");
 
   const onSubmit: SubmitHandler<FormData> = async (data) => {
-    console.log(data);
-
     setDialogOpen(true);
     setIsLoading(true);
 
@@ -64,14 +63,16 @@ export default function PasswordCrackerForm() {
       let response;
       if (data.method === "brute-force") {
         response = await axios.post(`${BASE_URL}/cracking/brute-force`, {
-          userLogin: data.userLogin,
+          userLogin: data.username,
           passwordLength: data.passwordLength,
+          hosts: data.hosts,
         });
-        console.log(123);
       } else if (data.method === "słownikowa") {
         const formData = new FormData();
-        formData.append("userLogin", data.userLogin);
+        formData.append("username", data.username);
+        formData.append("hosts", data.hosts.toString());
         if (data.dictionaryFile) {
+          console.log("idzie");
           formData.append("file", data.dictionaryFile);
           await axios.post(`${BASE_URL}/synchronizing/dictionary`, formData, {
             headers: {
@@ -92,7 +93,7 @@ export default function PasswordCrackerForm() {
 
       setResponseMessage(
         response?.data?.message || "Żądanie zostało wysłane pomyślnie!"
-      ); // Set response message
+      );
       toast("Żądanie zostało wysłane pomyślnie!", {
         style: { background: "green", color: "white" },
       });
@@ -176,18 +177,18 @@ export default function PasswordCrackerForm() {
           <div className="space-y-2">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center">
               <Label
-                htmlFor="userLogin"
+                htmlFor="username"
                 className="text-blue-700 font-medium mb-2 sm:mb-0 sm:mr-4"
               >
                 Wprowadź login użytkownika
               </Label>
               <Controller
-                name="userLogin"
+                name="username"
                 control={control}
                 render={({ field }) => (
                   <Input
                     {...field}
-                    id="userLogin"
+                    id="username"
                     className="w-full sm:w-48 bg-gray-100"
                   />
                 )}
@@ -244,6 +245,32 @@ export default function PasswordCrackerForm() {
                       id="passwordLength"
                       type="number"
                       min={6}
+                      className="w-full sm:w-48 bg-gray-100"
+                    />
+                  )}
+                />
+              </div>
+            </div>
+          )}
+
+          {methodSelected === "brute-force" && (
+            <div className="space-y-2">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center">
+                <Label
+                  htmlFor="hosts"
+                  className="text-blue-700 font-medium mb-2 sm:mb-0 sm:mr-4"
+                >
+                  Ilość hostów
+                </Label>
+                <Controller
+                  name="hosts"
+                  control={control}
+                  render={({ field }) => (
+                    <Input
+                      {...field}
+                      id="hosts"
+                      min={1}
+                      type="number"
                       className="w-full sm:w-48 bg-gray-100"
                     />
                   )}

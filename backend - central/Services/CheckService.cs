@@ -29,6 +29,10 @@ namespace backend___central.Services
                 IPAddress ipAddress = IPAddress.Parse(ipAddressString);
                 if (ipAddress != null)
                 {
+                    if (Startup.ServersIpAddresses.Contains(ipAddress))
+                    {
+                        throw new Exception($"Calculating server with IP address {ipAddress} is already connected");
+                    }
                     ILogService.LogInfo(_logServices, $"Made request to try to connect calculating server from IP address: {ipAddress}");
                     HandleCheckIfDatabaseIsAlive();
                     await HandleCheckIfCanConnectToCalculatingServer(ipAddress);
@@ -64,7 +68,7 @@ namespace backend___central.Services
             {
                 using HttpClient httpClient = new();
                 httpClient.Timeout = TimeSpan.FromSeconds(30);
-                string serverUrl = $"http://{ipAddress}:5099/api/calculating/check-connection";
+                string serverUrl = $"http://{ipAddress}:5099/api/calculating/check-dictionary-hash";
                 StringContent dictionaryHash = new(_dictionaryService.GetCurrentDictionaryHashResult());
                 HttpResponseMessage httpResponseMessage = await httpClient.PostAsync(serverUrl, dictionaryHash);
                 if (!httpResponseMessage.IsSuccessStatusCode)
@@ -146,7 +150,7 @@ namespace backend___central.Services
 
         private static async Task SendFileToServer(HttpClient httpClient, string ipAddress, MultipartFormDataContent formData)
         {
-            HttpResponseMessage response = await httpClient.PostAsync($"http://{ipAddress}:5099/api/synchronizing/dictionary", formData);
+            HttpResponseMessage response = await httpClient.PostAsync($"http://{ipAddress}:5099/api/dictionary/synchronizing", formData);
             if (!response.IsSuccessStatusCode)
             {
                 throw new Exception($"Server {ipAddress} responded with status code {response.StatusCode}");

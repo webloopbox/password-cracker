@@ -13,10 +13,16 @@ namespace backend___calculating.Controllers
             this.checkService = checkService;
         }
 
-        [HttpPost("check-connection")]
+        [HttpGet("check-connection")]
         public IActionResult CheckConnectionWithCalculatingServer()
         {
-            return checkService.HandleCheckConnectionRequest(HttpContext);
+            return new OkResult();
+        }
+
+        [HttpPost("check-dictionary-hash")]
+        public IActionResult CheckDictionaryHash()
+        {
+            return checkService.HandleCheckDictionaryHashRequest(HttpContext);
         }
     }
 }
