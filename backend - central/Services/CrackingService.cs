@@ -36,200 +36,330 @@ namespace backend___central.Services
             DateTime startTime = DateTime.UtcNow; 
             ILogService.LogInfo(logServices, "Made request to crack password using brute force method");
         
-            using StreamReader reader = new(httpContext.Request.Body);
-            string bodyContent = await reader.ReadToEndAsync();
-        
-            Console.WriteLine($"Request body content: {bodyContent}");
-        
             try
             {
-                ILogService.LogInfo(logServices, bodyContent);
-        
+                // Read request body
+                string bodyContent = await ReadRequestBody(httpContext);
+                
                 // Parse and validate request
-                DateTime parseStartTime = DateTime.UtcNow;
-                using JsonDocument document = JsonDocument.Parse(bodyContent);
-                JsonElement root = document.RootElement;
-                if (!root.TryGetProperty("passwordLength", out JsonElement passwordLengthElement) ||
-                    !root.TryGetProperty("userLogin", out JsonElement userLoginElement))
-                {
-                    ILogService.LogError(logServices, "Invalid request data: Missing required fields");
-                    return new ContentResult
-                    {
-                        Content = "Invalid request data. Missing required fields.",
-                        ContentType = "text/plain",
-                        StatusCode = 400
-                    };
-                }
-                if (!passwordLengthElement.TryGetInt32(out int passwordLength))
-                {
-                    ILogService.LogError(logServices, "Invalid request data: passwordLength must be an integer");
-                    return new ContentResult
-                    {
-                        Content = "Invalid request data. passwordLength must be an integer.",
-                        ContentType = "text/plain",
-                        StatusCode = 400
-                    };
-                }
-        
-                string userLogin = userLoginElement.GetString() ?? string.Empty;
-                int hostsCount = Startup.ServersIpAddresses.Count;
-        
-                // Distribution setup time
-                DateTime distributionStartTime = DateTime.UtcNow;
-                int parseTime = (int)(distributionStartTime - parseStartTime).TotalMilliseconds;
-                ILogService.LogInfo(logServices, $"Request parsing completed in {parseTime}ms");
+                var (passwordLength, userLogin, parseTime) = await ParseAndValidateRequest(bodyContent, startTime);
                 
-                Console.WriteLine($"Number of hosts: {hostsCount}");
-                string allChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-                int portionSize = allChars.Length / hostsCount;
-                List<string> charPortions = Enumerable.Range(0, hostsCount)
-                                             .Select(i => allChars.Substring(i * portionSize, Math.Min(portionSize, allChars.Length - i * portionSize)))
-                                             .ToList();
-        
-                using HttpClient httpClient = new();
-                httpClient.Timeout = TimeSpan.FromHours(2);
-        
-                Console.WriteLine($"Server IP Addresses: {string.Join(", ", Startup.ServersIpAddresses)}");
+                // Distribute characters across servers
+                var (charPortions, distributionTime) = DistributeCharacters(parseTime, startTime);
                 
-                DateTime tasksStartTime = DateTime.UtcNow;
-                int distributionTime = (int)(tasksStartTime - distributionStartTime).TotalMilliseconds;
-                ILogService.LogInfo(logServices, $"Character distribution completed in {distributionTime}ms - {hostsCount} portions created");
-        
-                // Create tasks for all servers
-                List<Task<(bool Success, string? Password, string ServerIp, int Time)>> tasks = new();
-                for (int i = 0; i < Startup.ServersIpAddresses.Count; i++)
-                {
-                    string serverIpAddress = Startup.ServersIpAddresses[i].ToString();
-                    ILogService.LogInfo(logServices, $"Checking connection to server {serverIpAddress}");
-                    await checkService.HandleCheckIfCanConnectToCalculatingServer(System.Net.IPAddress.Parse(serverIpAddress));
-                    ILogService.LogInfo(logServices, $"Successfully connected to server {serverIpAddress}");
-        
-                    object payload = new
-                    {
-                        passwordLength,
-                        userLogin,
-                        chars = charPortions[i]
-                    };
-        
-                    string payloadJson = JsonSerializer.Serialize(payload);
-                    ILogService.LogInfo(logServices, $"Sending request to server {serverIpAddress} with character range: {charPortions[i].First()}-{charPortions[i].Last()}");
-        
-                    tasks.Add(Task.Run(async () =>
-                    {
-                        DateTime serverStartTime = DateTime.UtcNow;
-                        try
-                        {
-                            using var httpClient = new HttpClient { Timeout = TimeSpan.FromHours(2) };
-                            ILogService.LogInfo(logServices, $"Sending brute force request to {serverIpAddress}");
-                            
-                            var response = await httpClient.PostAsync(
-                                $"http://{serverIpAddress}:5099/api/synchronizing/brute-force",
-                                new StringContent(payloadJson, System.Text.Encoding.UTF8, "application/json")
-                            );
-        
-                            DateTime serverResponseTime = DateTime.UtcNow;
-                            int serverRequestTime = (int)(serverResponseTime - serverStartTime).TotalMilliseconds;
-                            ILogService.LogInfo(logServices, $"Received response from {serverIpAddress} in {serverRequestTime}ms");
-        
-                            if (!response.IsSuccessStatusCode)
-                            {
-                                ILogService.LogError(logServices, $"Failed to synchronize with server {serverIpAddress}. Status code: {response.StatusCode}");
-                                return (Success: false, Password: (string?)null, ServerIp: serverIpAddress, Time: -1);
-                            }
-        
-                            string responseContent = await response.Content.ReadAsStringAsync();
-                            var responseData = JsonSerializer.Deserialize<BruteForceResponse>(responseContent);
-        
-                            if (responseData == null || responseData.Time == -1)
-                            {
-                                ILogService.LogError(logServices, $"Invalid response from server {serverIpAddress}: Invalid execution time");
-                                return (Success: false, Password: (string?)null, ServerIp: serverIpAddress, Time: -1);
-                            }
-        
-                            if (responseData.Message == "Password found." && !string.IsNullOrEmpty(responseData.Password))
-                            {
-                                ILogService.LogInfo(logServices,
-                                    $"Password found by server {serverIpAddress}: {responseData.Password} in {responseData.Time}ms");
-                                return (Success: true, responseData.Password, ServerIp: serverIpAddress, Time: responseData.Time);
-                            }
-        
-                            ILogService.LogInfo(logServices,
-                                $"No password found by server {serverIpAddress}. Time taken: {responseData.Time}ms");
-                            return (Success: false, Password: (string?)null, ServerIp: serverIpAddress, Time: responseData.Time);
-                        }
-                        catch (Exception ex)
-                        {
-                            DateTime errorTime = DateTime.UtcNow;
-                            int errorDuration = (int)(errorTime - serverStartTime).TotalMilliseconds;
-                            ILogService.LogError(logServices, $"Error communicating with server {serverIpAddress} after {errorDuration}ms: {ex.Message}");
-                            return (Success: false, Password: (string?)null, ServerIp: serverIpAddress, Time: -1);
-                        }
-                    }));
-                }
-        
-                DateTime awaitStartTime = DateTime.UtcNow;
-                int taskSetupTime = (int)(awaitStartTime - tasksStartTime).TotalMilliseconds;
-                ILogService.LogInfo(logServices, $"All {tasks.Count} tasks created in {taskSetupTime}ms - now waiting for completion");
-        
-                var results = await Task.WhenAll(tasks);
+                // Create and execute server tasks
+                var (results, taskSetupTime, processingTime) = await CreateAndExecuteServerTasks(
+                    charPortions, passwordLength, userLogin, startTime, distributionTime);
                 
-                DateTime resultsTime = DateTime.UtcNow;
-                int processingTime = (int)(resultsTime - awaitStartTime).TotalMilliseconds;
-                ILogService.LogInfo(logServices, $"All servers completed in {processingTime}ms");
-                
-                var successfulResult = results.FirstOrDefault(r => r.Success);
+                // Process results and create response
                 int totalTime = (int)(DateTime.UtcNow - startTime).TotalMilliseconds;
-        
-                if (successfulResult.Success)
-                {
-                    ILogService.LogInfo(logServices, $"Total brute force operation completed successfully in {totalTime}ms");
-                    return new OkObjectResult(new
-                    {
-                        Message = "Password found.",
-                        Password = successfulResult.Password,
-                        Server = successfulResult.ServerIp,
-                        ServerExecutionTime = successfulResult.Time,
-                        TotalExecutionTime = totalTime,
-                        Timing = new
-                        {
-                            ParseTime = parseTime,
-                            DistributionTime = distributionTime,
-                            TaskSetupTime = taskSetupTime,
-                            ProcessingTime = processingTime,
-                            TotalTime = totalTime
-                        }
-                    });
-                }
-        
-                ILogService.LogInfo(logServices, $"Total brute force operation completed with no password found in {totalTime}ms");
-                return new NotFoundObjectResult(new
-                {
-                    Message = "Password not found by any server.",
-                    TotalExecutionTime = totalTime,
-                    ServersTimes = results.Where(r => r.Time != -1)
-                                        .Select(r => new { Server = r.ServerIp, Time = r.Time })
-                                        .ToList(),
-                    Timing = new
-                    {
-                        ParseTime = parseTime,
-                        DistributionTime = distributionTime,
-                        TaskSetupTime = taskSetupTime,
-                        ProcessingTime = processingTime,
-                        TotalTime = totalTime
-                    }
-                });
+                return ProcessResults(results, totalTime, parseTime, distributionTime, taskSetupTime, processingTime);
             }
             catch (Exception ex)
             {
-                int errorTime = (int)(DateTime.UtcNow - startTime).TotalMilliseconds;
-                ILogService.LogError(logServices, $"Cannot connect to calculating server due to: {ex.Message} (after {errorTime}ms)");
-                return new ContentResult
-                {
-                    Content = $"An error occurred while trying to connect calculating server: {ex.Message}",
-                    ContentType = "text/plain",
-                    StatusCode = 500
-                };
+                return HandleBruteForceError(ex, startTime);
             }
+        }
+        
+        private async Task<string> ReadRequestBody(HttpContext httpContext)
+        {
+            using StreamReader reader = new(httpContext.Request.Body);
+            string bodyContent = await reader.ReadToEndAsync();
+            
+            Console.WriteLine($"Request body content: {bodyContent}");
+            ILogService.LogInfo(logServices, bodyContent);
+            
+            return bodyContent;
+        }
+        
+        private async Task<(int passwordLength, string userLogin, int parseTime)> ParseAndValidateRequest(
+            string bodyContent, DateTime startTime)
+        {
+            DateTime parseStartTime = DateTime.UtcNow;
+            
+            using JsonDocument document = JsonDocument.Parse(bodyContent);
+            JsonElement root = document.RootElement;
+            
+            if (!root.TryGetProperty("passwordLength", out JsonElement passwordLengthElement) ||
+                !root.TryGetProperty("userLogin", out JsonElement userLoginElement))
+            {
+                ILogService.LogError(logServices, "Invalid request data: Missing required fields");
+                throw new ArgumentException("Invalid request data. Missing required fields.");
+            }
+            
+            if (!passwordLengthElement.TryGetInt32(out int passwordLength))
+            {
+                ILogService.LogError(logServices, "Invalid request data: passwordLength must be an integer");
+                throw new ArgumentException("Invalid request data. passwordLength must be an integer.");
+            }
+        
+            string userLogin = userLoginElement.GetString() ?? string.Empty;
+            
+            DateTime distributionStartTime = DateTime.UtcNow;
+            int parseTime = (int)(distributionStartTime - parseStartTime).TotalMilliseconds;
+            ILogService.LogInfo(logServices, $"Request parsing completed in {parseTime}ms");
+            
+            return (passwordLength, userLogin, parseTime);
+        }
+        
+        private (List<string> charPortions, int distributionTime) DistributeCharacters(
+            int parseTime, DateTime startTime)
+        {
+            DateTime distributionStartTime = DateTime.UtcNow;
+            int hostsCount = Startup.ServersIpAddresses.Count;
+            
+            Console.WriteLine($"Number of hosts: {hostsCount}");
+            string allChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            int portionSize = allChars.Length / hostsCount;
+            
+            List<string> charPortions = Enumerable.Range(0, hostsCount)
+                .Select(i => allChars.Substring(i * portionSize, Math.Min(portionSize, allChars.Length - i * portionSize)))
+                .ToList();
+            
+            Console.WriteLine($"Server IP Addresses: {string.Join(", ", Startup.ServersIpAddresses)}");
+            
+            DateTime tasksStartTime = DateTime.UtcNow;
+            int distributionTime = (int)(tasksStartTime - distributionStartTime).TotalMilliseconds;
+            ILogService.LogInfo(logServices, $"Character distribution completed in {distributionTime}ms - {hostsCount} portions created");
+            
+            return (charPortions, distributionTime);
+        }
+        
+        private async Task<(IEnumerable<(bool Success, string? Password, string ServerIp, int Time)> results, 
+            int taskSetupTime, int processingTime)> CreateAndExecuteServerTasks(
+            List<string> charPortions, int passwordLength, string userLogin, 
+            DateTime startTime, int distributionTime)
+        {
+            DateTime tasksStartTime = DateTime.UtcNow;
+            
+            // Create tasks for all servers
+            List<Task<(bool Success, string? Password, string ServerIp, int Time)>> tasks = new();
+            
+            for (int i = 0; i < Startup.ServersIpAddresses.Count; i++)
+            {
+                string serverIpAddress = Startup.ServersIpAddresses[i].ToString();
+                await ValidateServerConnection(serverIpAddress);
+                
+                string charRange = charPortions[i];
+                tasks.Add(CreateServerTask(serverIpAddress, passwordLength, userLogin, charRange));
+            }
+            
+            DateTime awaitStartTime = DateTime.UtcNow;
+            int taskSetupTime = (int)(awaitStartTime - tasksStartTime).TotalMilliseconds;
+            ILogService.LogInfo(logServices, $"All {tasks.Count} tasks created in {taskSetupTime}ms - now waiting for completion");
+            
+            var results = await Task.WhenAll(tasks);
+            
+            DateTime resultsTime = DateTime.UtcNow;
+            int processingTime = (int)(resultsTime - awaitStartTime).TotalMilliseconds;
+            ILogService.LogInfo(logServices, $"[BruteForce] Processing: Total = {processingTime} ms | Servers completed = {results.Length}");
+            
+            return (results, taskSetupTime, processingTime);
+        }
+        
+        private async Task ValidateServerConnection(string serverIpAddress)
+        {
+            ILogService.LogInfo(logServices, $"Checking connection to server {serverIpAddress}");
+            await checkService.HandleCheckIfCanConnectToCalculatingServer(System.Net.IPAddress.Parse(serverIpAddress));
+            ILogService.LogInfo(logServices, $"Successfully connected to server {serverIpAddress}");
+        }
+        
+        private Task<(bool Success, string? Password, string ServerIp, int Time)> CreateServerTask(
+            string serverIpAddress, int passwordLength, string userLogin, string chars)
+        {
+            object payload = new
+            {
+                passwordLength,
+                userLogin,
+                chars
+            };
+        
+            string payloadJson = JsonSerializer.Serialize(payload);
+            ILogService.LogInfo(logServices, $"Sending request to server {serverIpAddress} with character range: {chars.First()}-{chars.Last()}");
+        
+            return Task.Run(async () =>
+            {
+                DateTime serverStartTime = DateTime.UtcNow;
+                try
+                {
+                    using var httpClient = new HttpClient { Timeout = TimeSpan.FromHours(2) };
+                    ILogService.LogInfo(logServices, $"Sending brute force request to {serverIpAddress}");
+                    
+                    var response = await httpClient.PostAsync(
+                        $"http://{serverIpAddress}:5099/api/synchronizing/brute-force",
+                        new StringContent(payloadJson, System.Text.Encoding.UTF8, "application/json")
+                    );
+            
+                    DateTime serverResponseTime = DateTime.UtcNow;
+                    int serverRequestTime = (int)(serverResponseTime - serverStartTime).TotalMilliseconds;
+                    
+                    return await ProcessServerResponse(response, serverIpAddress, serverRequestTime);
+                }
+                catch (Exception ex)
+                {
+                    DateTime errorTime = DateTime.UtcNow;
+                    int errorDuration = (int)(errorTime - serverStartTime).TotalMilliseconds;
+                    ILogService.LogError(logServices, 
+                        $"[BruteForce] Server {serverIpAddress}: Error | Communication time = {errorDuration} ms | Error: {ex.Message}");
+                    return (Success: false, Password: (string?)null, ServerIp: serverIpAddress, Time: -1);
+                }
+            });
+        }
+        
+                private async Task<(bool Success, string? Password, string ServerIp, int Time)> ProcessServerResponse(
+            HttpResponseMessage response, string serverIpAddress, int serverRequestTime)
+        {
+            // Log initial response received
+            ILogService.LogInfo(logServices, 
+                $"[BruteForce] Server {serverIpAddress}: Response received | Communication time = {serverRequestTime} ms");
+        
+            if (!response.IsSuccessStatusCode)
+            {
+                ILogService.LogError(logServices, $"Failed to synchronize with server {serverIpAddress}. Status code: {response.StatusCode}");
+                return (Success: false, Password: (string?)null, ServerIp: serverIpAddress, Time: -1);
+            }
+        
+            string responseContent = await response.Content.ReadAsStringAsync();
+            
+            // Parse calculation time from response
+            int calculatingServerTime = -1;
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(responseContent);
+                if (document.RootElement.TryGetProperty("time", out JsonElement timeElement) && 
+                    timeElement.ValueKind == JsonValueKind.Number)
+                {
+                    calculatingServerTime = timeElement.GetInt32();
+                }
+                else if (document.RootElement.TryGetProperty("calculationTime", out JsonElement calcTimeElement) && 
+                        calcTimeElement.ValueKind == JsonValueKind.Number)
+                {
+                    calculatingServerTime = calcTimeElement.GetInt32();
+                }
+            }
+            catch (JsonException)
+            {
+                ILogService.LogInfo(logServices, $"Response from server {serverIpAddress} is not in JSON format");
+            }
+        
+            // Calculate communication time
+            int communicationTime = calculatingServerTime > 0 ? serverRequestTime - calculatingServerTime : serverRequestTime;
+        
+            // Log in the standardized format
+            ILogService.LogInfo(logServices, 
+                $"[BruteForce] Central: Total = {serverRequestTime} ms" + 
+                (calculatingServerTime > 0 ? $" | Calculating: ({serverIpAddress}) Total = {calculatingServerTime} ms" : "") + 
+                $" | Communication time = {communicationTime} ms");
+        
+            var responseData = JsonSerializer.Deserialize<BruteForceResponse>(responseContent);
+            if (responseData == null)
+            {
+                ILogService.LogError(logServices, $"Invalid response from server {serverIpAddress}: Could not parse response");
+                return (Success: false, Password: (string?)null, ServerIp: serverIpAddress, Time: -1);
+            }
+        
+            if (responseData.Message == "Password found." && !string.IsNullOrEmpty(responseData.Password))
+            {
+                // Use the standard log format for consistency
+                ILogService.LogInfo(logServices, $"Server {serverIpAddress} completed processing: {responseContent}");
+                return (Success: true, responseData.Password, ServerIp: serverIpAddress, Time: calculatingServerTime > 0 ? calculatingServerTime : responseData.Time);
+            }
+        
+            // Use the standard log format for consistency
+            ILogService.LogInfo(logServices, $"Server {serverIpAddress} completed processing: {responseContent}");
+            return (Success: false, Password: (string?)null, ServerIp: serverIpAddress, Time: calculatingServerTime > 0 ? calculatingServerTime : responseData.Time);
+        }
+        
+        private IActionResult ProcessResults(
+            IEnumerable<(bool Success, string? Password, string ServerIp, int Time)> results, 
+            int totalTime, int parseTime, int distributionTime, int taskSetupTime, int processingTime)
+        {
+            var successfulResult = results.FirstOrDefault(r => r.Success);
+            
+            if (successfulResult.Success)
+            {
+                return CreateSuccessResponse(successfulResult, totalTime, parseTime, distributionTime, taskSetupTime, processingTime);
+            }
+            
+            return CreateNotFoundResponse(results, totalTime, parseTime, distributionTime, taskSetupTime, processingTime);
+        }
+        
+        private IActionResult CreateSuccessResponse(
+            (bool Success, string? Password, string ServerIp, int Time) successfulResult, 
+            int totalTime, int parseTime, int distributionTime, int taskSetupTime, int processingTime)
+        {
+            int communicationTime = totalTime - successfulResult.Time;
+            
+            // Use the consistent format from HandleSuccessfulResponse
+            ILogService.LogInfo(logServices, 
+                $"[BruteForce] Central: Total = {totalTime} ms" + 
+                $" | Calculating: ({successfulResult.ServerIp}) Total = {successfulResult.Time} ms" + 
+                $" | Communication time = {communicationTime} ms");
+                
+            return new OkObjectResult(new
+            {
+                Message = "Password found.",
+                Password = successfulResult.Password,
+                Server = successfulResult.ServerIp,
+                ServerExecutionTime = successfulResult.Time,
+                TotalExecutionTime = totalTime,
+                CommunicationTime = communicationTime,
+                Timing = new
+                {
+                    ParseTime = parseTime,
+                    DistributionTime = distributionTime,
+                    TaskSetupTime = taskSetupTime,
+                    ProcessingTime = processingTime,
+                    TotalTime = totalTime
+                }
+            });
+        }
+        
+        private IActionResult CreateNotFoundResponse(
+            IEnumerable<(bool Success, string? Password, string ServerIp, int Time)> results, 
+            int totalTime, int parseTime, int distributionTime, int taskSetupTime, int processingTime)
+        {
+            var validTimes = results.Where(r => r.Time != -1).ToList();
+            int avgServerTime = (int)(validTimes.Any() ? validTimes.Average(r => r.Time) : 0);
+            int avgCommunicationTime = totalTime - avgServerTime;
+            
+            // Use the consistent format from HandleSuccessfulResponse
+            ILogService.LogInfo(logServices, 
+                $"[BruteForce] Central: Total = {totalTime} ms" + 
+                (avgServerTime > 0 ? $" | Calculating: (average) Total = {avgServerTime} ms" : "") + 
+                $" | Communication time = {avgCommunicationTime} ms");
+            
+            return new NotFoundObjectResult(new
+            {
+                Message = "Password not found by any server.",
+                TotalExecutionTime = totalTime,
+                AverageServerTime = avgServerTime,
+                CommunicationTime = avgCommunicationTime,
+                ServersTimes = results.Where(r => r.Time != -1)
+                    .Select(r => new { Server = r.ServerIp, Time = r.Time })
+                    .ToList(),
+                Timing = new
+                {
+                    ParseTime = parseTime,
+                    DistributionTime = distributionTime,
+                    TaskSetupTime = taskSetupTime,
+                    ProcessingTime = processingTime,
+                    TotalTime = totalTime
+                }
+            });
+        }
+        
+        private IActionResult HandleBruteForceError(Exception ex, DateTime startTime)
+        {
+            int errorTime = (int)(DateTime.UtcNow - startTime).TotalMilliseconds;
+            ILogService.LogError(logServices, $"Cannot connect to calculating server due to: {ex.Message} (after {errorTime}ms)");
+            
+            return new ContentResult
+            {
+                Content = $"An error occurred while trying to connect calculating server: {ex.Message}",
+                ContentType = "text/plain",
+                StatusCode = 500
+            };
         }
 
         public async Task<IActionResult> HandleDictionaryCracking(HttpContext httpContext)

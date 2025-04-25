@@ -27,7 +27,12 @@ namespace backend___calculating.Services
             if (httpContext == null || httpContext.Request?.Body == null)
             {
                 ILogService.LogError(logServices, "HttpContext or Request.Body is null");
-                return new BadRequestObjectResult(new { Message = "HttpContext or Request.Body is null.", Time = -1 });
+                return new BadRequestObjectResult(new BruteForceResponse
+                { 
+                    Message = "HttpContext or Request.Body is null.", 
+                    Time = -1,
+                    CalculationTime = -1
+                });
             }
 
             using StreamReader reader = new(httpContext.Request.Body);
@@ -42,14 +47,26 @@ namespace backend___calculating.Services
                 if (requestData == null || string.IsNullOrEmpty(requestData.userLogin))
                 {
                     ILogService.LogError(logServices, "Invalid request data");
-                    return new BadRequestObjectResult(new { Message = "Invalid request data.", Time = -1 });
+                    return new BadRequestObjectResult(new BruteForceResponse
+                    { 
+                        Message = "Invalid request data.", 
+                        Time = -1,
+                        CalculationTime = -1
+                    });
                 }
 
+
                 string? hash = await GetHashFromDatabase(requestData.userLogin);
+
                 if (string.IsNullOrEmpty(hash))
                 {
                     ILogService.LogError(logServices, $"Hash for user login '{requestData.userLogin}' not found.");
-                    return new NotFoundObjectResult(new { Message = $"Hash for user login '{requestData.userLogin}' not found.", Time = -1 });
+                    return new NotFoundObjectResult(new BruteForceResponse
+                    { 
+                        Message = $"Hash for user login '{requestData.userLogin}' not found.", 
+                        Time = -1,
+                        CalculationTime = -1 
+                    });
                 }
 
                 ILogService.LogInfo(logServices, $"Retrieved hash for user '{requestData.userLogin}': {hash}");
@@ -63,20 +80,26 @@ namespace backend___calculating.Services
                 // Perform brute-force cracking
                 string? foundPassword = PerformBruteForce(requestData.Chars, requestData.PasswordLength, hash);
 
+                // Calculate timing information after brute force completes
                 DateTime endTime = DateTime.UtcNow;
                 int totalTime = (int)(endTime - startTime).TotalMilliseconds;
                 int calculationTime = (int)(endTime - calculationStartTime).TotalMilliseconds;
                 int communicationTime = totalTime - calculationTime;
 
-                ILogService.LogInfo(logServices, $"[BruteForce] Total = {totalTime} ms | " +  $"Calculation = {calculationTime} ms | " +  $"Communication time = {communicationTime} ms");
+                // Updated logging format
+                ILogService.LogInfo(logServices,
+                    $"[BruteForce] Total = {totalTime} ms | " +
+                    $"Calculation = {calculationTime} ms | " +
+                    $"Communication time = {communicationTime} ms");
 
                 if (foundPassword != null)
                 {
                     ILogService.LogInfo(logServices, $"Password found: {foundPassword}");
                     Console.WriteLine($"Password found: {foundPassword}");
-                    return new OkObjectResult(new { 
-                        Message = "Password found.", 
-                        Password = foundPassword, 
+                    return new OkObjectResult(new BruteForceResponse
+                    {
+                        Message = "Password found.",
+                        Password = foundPassword,
                         Time = totalTime,
                         CalculationTime = calculationTime
                     });
@@ -85,7 +108,7 @@ namespace backend___calculating.Services
                 {
                     ILogService.LogInfo(logServices, "Password not found in the given range.");
                     Console.WriteLine("Password not found in the given range.");
-                    return new OkObjectResult(new
+                    return new OkObjectResult(new BruteForceResponse
                     {
                         Message = "Password not found.",
                         Time = totalTime,
@@ -101,10 +124,11 @@ namespace backend___calculating.Services
                 ILogService.LogError(logServices, $"Error during brute force: {ex.Message}");
                 Console.WriteLine($"Error during brute force: {ex.Message}");
 
-                return new ObjectResult(new
+                return new ObjectResult(new BruteForceResponse
                 {
                     Message = $"An error occurred during brute force: {ex.Message}",
-                    Time = totalTime
+                    Time = totalTime,
+                    CalculationTime = -1
                 })
                 {
                     StatusCode = 500
@@ -218,6 +242,21 @@ namespace backend___calculating.Services
 
             [JsonPropertyName("chars")]
             public string Chars { get; set; } = string.Empty;
+        }
+
+        private class BruteForceResponse
+        {
+            [JsonPropertyName("message")]
+            public string Message { get; set; } = string.Empty;
+
+            [JsonPropertyName("password")]
+            public string? Password { get; set; } = null;
+
+            [JsonPropertyName("time")]
+            public int Time { get; set; }
+
+            [JsonPropertyName("calculationTime")]
+            public int CalculationTime { get; set; }
         }
     }
 }
