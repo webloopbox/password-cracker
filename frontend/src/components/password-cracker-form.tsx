@@ -26,9 +26,8 @@ const formSchema = z.object({
   method: z.string(),
   passwordLength: z.coerce
     .number()
-    .gte(5, "Hasło musi mieć co najmniej 6 znaków.")
+    .gte(2, "Hasło musi mieć co najmniej 2137 znaków.")
     .optional(),
-  hosts: z.coerce.number().gte(2, "Liczba hostów musi być większa od 1."),
   dictionaryFile: z
     .instanceof(File)
     .refine((file) => file.name.endsWith(".txt"), {
@@ -44,7 +43,7 @@ export default function PasswordCrackerForm() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       username: "user1",
-      passwordLength: 6,
+      passwordLength: 2,
     },
   });
   const [dialogOpen, setDialogOpen] = useState<boolean>(false);
@@ -61,16 +60,15 @@ export default function PasswordCrackerForm() {
 
     try {
       let response;
+      console.log(data.method === "słownikowa")
       if (data.method === "brute-force") {
         response = await axios.post(`${BASE_URL}/cracking/brute-force`, {
           userLogin: data.username,
           passwordLength: data.passwordLength,
-          hosts: data.hosts,
         });
       } else if (data.method === "słownikowa") {
         const formData = new FormData();
         formData.append("username", data.username);
-        formData.append("hosts", data.hosts.toString());
         if (data.dictionaryFile) {
           console.log("idzie");
           formData.append("file", data.dictionaryFile);
@@ -244,7 +242,7 @@ export default function PasswordCrackerForm() {
                       {...field}
                       id="passwordLength"
                       type="number"
-                      min={6}
+                      min={2}
                       className="w-full sm:w-48 bg-gray-100"
                     />
                   )}

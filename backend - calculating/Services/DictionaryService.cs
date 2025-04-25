@@ -34,7 +34,6 @@ namespace backend___calculating.Services
         public async Task<ActionResult> SynchronizeDictionaryResult(HttpContext httpContext)
         {
             ILogService.LogInfo(logServices, "Synchronizing dictionary with central server");
-            DateTime secondDateTime = DateTime.UtcNow;
             try
             {
                 DictionaryDirectory = Path.Combine(Directory.GetCurrentDirectory(), "dictionary");
@@ -43,14 +42,11 @@ namespace backend___calculating.Services
                 IFormFile? iFormFile = iFormCollection.Files.GetFile("file");
                 HandleValidateFile(iFormFile);
                 string fileName = await HandleSaveFile(iFormFile);
-                DateTime thirdDateTime = DateTime.UtcNow;
-                int TotalCalculatingExecutionTime= (int)(thirdDateTime - secondDateTime).TotalMilliseconds;
                 return new ContentResult
                 {
                     Content = $"Successfully synchronized dictionary. Filename: {Path.GetFileName(fileName)}.txt, Path: {DictionaryDirectory}",
                     ContentType = "text/plain",
-                    StatusCode = 200,
-                    Time = TotalCalculatingExecutionTime
+                    StatusCode = 200
                 };
             }
             catch (Exception ex)
@@ -60,14 +56,14 @@ namespace backend___calculating.Services
                 {
                     Content = $"An error occurred while synchronizing dictionary pack file: {ex.Message}",
                     ContentType = "text/plain",
-                    StatusCode = 500,
-                    Time = -1
+                    StatusCode = 500
                 };
             }
         }
 
         public async Task<ActionResult> StartCrackingResult(HttpContext httpContext)
         {
+            DateTime startTime = DateTime.UtcNow;
             try
             {
                 var (username, chunkInfo) = await ReadAndDeserializeRequest(httpContext);
@@ -75,16 +71,57 @@ namespace backend___calculating.Services
                 ValidateSelectedPasswords(selectedPasswords, chunkInfo);
                 await CheckPasswordsAgainstDatabase(selectedPasswords, username);
                 LogSuccessfulPasswordLoading(selectedPasswords, chunkInfo);
-                return SuccessResponse("Password not found!");
+
+                DateTime endTime = DateTime.UtcNow;
+                int processingTime = (int)(endTime - startTime).TotalMilliseconds;
+
+                return JsonSuccessResponse("Password not found!", processingTime);
             }
             catch (Exception ex)
             {
-                if (ex.Message.Contains("Password found!")) {
-                    return SuccessResponse(ex.Message);
+                DateTime endTime = DateTime.UtcNow;
+                int processingTime = (int)(endTime - startTime).TotalMilliseconds;
+
+                if (ex.Message.Contains("Password found!"))
+                {
+                    return JsonSuccessResponse(ex.Message, processingTime);
                 }
+
                 ILogService.LogError(logServices, $"Error while cracking using dictionary: {ex.Message}");
-                return CreateErrorResponse(ex.Message);
+                return JsonErrorResponse(ex.Message, processingTime);
             }
+        }
+
+        private static JsonResult JsonSuccessResponse(string message, int processingTime)
+        {
+            var resultObject = new
+            {
+                Message = message,
+                Status = 200,
+                Time = processingTime
+            };
+
+            return new JsonResult(resultObject)
+            {
+                StatusCode = 200,
+                ContentType = "application/json"
+            };
+        }
+
+        private static JsonResult JsonErrorResponse(string errorMessage, int processingTime)
+        {
+            var resultObject = new
+            {
+                Message = $"An error occurred while cracking using dictionary: {errorMessage}",
+                Status = 500,
+                Time = processingTime
+            };
+
+            return new JsonResult(resultObject)
+            {
+                StatusCode = 500,
+                ContentType = "application/json"
+            };
         }
 
         private async Task CheckPasswordsAgainstDatabase(List<string> passwords, string username)
@@ -97,7 +134,7 @@ namespace backend___calculating.Services
             {
                 currentPassword++;
                 string hashedPassword = CalculateMD5Hash(password);
-                ILogService.LogInfo(logServices, 
+                ILogService.LogInfo(logServices,
                     $"Checking password [{currentPassword}/{totalPasswords}]: '{password}' (MD5: {hashedPassword})");
                 using NpgsqlCommand command = new(
                     "SELECT login FROM users WHERE LOWER(login) = LOWER(@username) AND password = @hash LIMIT 1",
@@ -134,7 +171,7 @@ namespace backend___calculating.Services
         {
             using StreamReader reader = new(httpContext.Request.Body);
             string jsonBody = await reader.ReadToEndAsync();
-            try 
+            try
             {
                 Dictionary<string, JsonElement> request = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(jsonBody)
                     ?? throw new Exception("Request body is empty");
@@ -142,7 +179,7 @@ namespace backend___calculating.Services
                     throw new Exception("Username not found in request");
                 if (!request.TryGetValue("chunk", out var chunkElement))
                     throw new Exception("Chunk information not found in request");
-                string username = usernameElement.GetString() 
+                string username = usernameElement.GetString()
                     ?? throw new Exception("Invalid username format");
                 ChunkInfo chunkInfo = JsonSerializer.Deserialize<ChunkInfo>(chunkElement.GetRawText())
                     ?? throw new Exception("Invalid chunk information format");
