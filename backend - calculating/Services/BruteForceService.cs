@@ -14,9 +14,12 @@ namespace backend___calculating.Services
     {
         public async Task<IActionResult> SynchronizeBruteForce(HttpContext httpContext)
         {
+            DateTime secondDateTime = DateTime.UtcNow;
             if (httpContext == null || httpContext.Request?.Body == null)
             {
-                return new BadRequestObjectResult("HttpContext or Request.Body is null.");
+                DateTime thirdDateTime = DateTime.UtcNow;
+                int TotalCalculatingExecutionTime= (int)(thirdDateTime - secondDateTime).TotalMilliseconds;
+                return new BadRequestObjectResult(new { Message = "HttpContext or Request.Body is null.", Time = -1 });
             }
 
             using StreamReader reader = new(httpContext.Request.Body);
@@ -27,29 +30,35 @@ namespace backend___calculating.Services
             var requestData = JsonSerializer.Deserialize<BruteForceRequest>(bodyContent);
             if (requestData == null || string.IsNullOrEmpty(requestData.userLogin))
             {
-                return new BadRequestObjectResult("Invalid request data.");
+                DateTime thirdDateTime = DateTime.UtcNow;
+                int TotalCalculatingExecutionTime= (int)(thirdDateTime - secondDateTime).TotalMilliseconds;
+                return new BadRequestObjectResult(new { Message = "Invalid request data.", Time = -1 });
             }
 
             string? hash = await GetHashFromDatabase(requestData.userLogin);
             if (string.IsNullOrEmpty(hash))
             {
-                return new NotFoundObjectResult($"Hash for user login '{requestData.userLogin}' not found.");
+                DateTime thirdDateTime = DateTime.UtcNow;
+                int TotalCalculatingExecutionTime= (int)(thirdDateTime - secondDateTime).TotalMilliseconds;
+                return new NotFoundObjectResult(new { Message = $"Hash for user login '{requestData.userLogin}' not found.", Time = -1 });
             }
 
             Console.WriteLine($"Retrieved hash for user '{requestData.userLogin}': {hash}");
 
             // Perform brute-force cracking
             string? foundPassword = PerformBruteForce(requestData.Chars, requestData.PasswordLength, hash);
+            DateTime thirdDateTime = DateTime.UtcNow;
+            int TotalCalculatingExecutionTime= (int)(thirdDateTime - secondDateTime).TotalMilliseconds;
 
             if (foundPassword != null)
             {
                 Console.WriteLine($"Password found: {foundPassword}");
-                return new OkObjectResult(new { Message = "Password found.", Password = foundPassword });
+                return new OkObjectResult(new { Message = "Password found.", Password = foundPassword, Time = TotalCalculatingExecutionTime});
             }
             else
             {
                 Console.WriteLine("Password not found in the given range.");
-                return new OkObjectResult(new { Message = "Password not found." });
+                return new OkObjectResult(new { Message = "Password not found.", Time = TotalCalculatingExecutionTime});
             }
         }
 
