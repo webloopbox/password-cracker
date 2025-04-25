@@ -28,3 +28,5 @@ obj
 .env
 dictionary
 insert_users.sql
+logs-backend-calculating.txt
+logs-backend-central.txt
