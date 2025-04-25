@@ -161,6 +161,10 @@ namespace backend___calculating.Services
                         foreach (var combination in GenerateCombinations(chars, length - 1))
                         {
                             string result = c + combination;
+                            if (result.Length > 12)
+                            {
+                                result = result.Substring(0, 12);
+                            }
                             yield return result;
                         }
                     }
