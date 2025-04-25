@@ -191,6 +191,7 @@ namespace backend___central.Services
         {
             try
             {
+                DateTime firstDateTime = DateTime.UtcNow;
                 int currentLine = 1;
                 string username = await ExtractUsername(httpContext);
                 int totalLines = await chunkManager.GetDictionaryTotalLines();
@@ -206,6 +207,9 @@ namespace backend___central.Services
                     }
                     currentLine = await ProcessServers(availableServers, currentLine, totalLines, username);
                 }
+                DateTime lastDateTime = DateTime.UtcNow;
+                int totalCentralExecutionTime= (int)(lastDateTime - firstDateTime).TotalMilliseconds;
+                ILogService.LogInfo(logServices, $"Central: Total = {totalCentralExecutionTime} ms");
                 return CreateFinalResponse();
             }
             catch (Exception ex)

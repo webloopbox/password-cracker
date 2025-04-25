@@ -34,6 +34,7 @@ namespace backend___calculating.Services
         public async Task<ActionResult> SynchronizeDictionaryResult(HttpContext httpContext)
         {
             ILogService.LogInfo(logServices, "Synchronizing dictionary with central server");
+            DateTime secondDateTime = DateTime.UtcNow;
             try
             {
                 DictionaryDirectory = Path.Combine(Directory.GetCurrentDirectory(), "dictionary");
@@ -42,11 +43,14 @@ namespace backend___calculating.Services
                 IFormFile? iFormFile = iFormCollection.Files.GetFile("file");
                 HandleValidateFile(iFormFile);
                 string fileName = await HandleSaveFile(iFormFile);
+                DateTime thirdDateTime = DateTime.UtcNow;
+                int TotalCalculatingExecutionTime= (int)(thirdDateTime - secondDateTime).TotalMilliseconds;
                 return new ContentResult
                 {
                     Content = $"Successfully synchronized dictionary. Filename: {Path.GetFileName(fileName)}.txt, Path: {DictionaryDirectory}",
                     ContentType = "text/plain",
-                    StatusCode = 200
+                    StatusCode = 200,
+                    Time = TotalCalculatingExecutionTime
                 };
             }
             catch (Exception ex)
@@ -56,7 +60,8 @@ namespace backend___calculating.Services
                 {
                     Content = $"An error occurred while synchronizing dictionary pack file: {ex.Message}",
                     ContentType = "text/plain",
-                    StatusCode = 500
+                    StatusCode = 500,
+                    Time = -1
                 };
             }
         }
