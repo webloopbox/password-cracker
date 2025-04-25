@@ -1,16 +1,16 @@
 services:
-  password-cracker-frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    networks:
-      - password-cracker-network
-    ports:
-      - "5173:5173"
-    restart: always
+  # password-cracker-frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   volumes:
+  #     - ./frontend:/app
+  #     - /app/node_modules
+  #   networks:
+  #     - password-cracker-network
+  #   ports:
+  #     - "5173:5173"
+  #   restart: always
 
   password-cracker-backend-central:
     build:
@@ -18,6 +18,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - "./backend - central:/App"
+      - ".env:/App/.env"
     env_file:
       - .env
     ports:

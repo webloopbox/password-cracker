@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - "./backend - calculating:/App"
+      - ".env:/App/.env"
     ports:
       - "5099:5099"
     env_file:

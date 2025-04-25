@@ -15,13 +15,9 @@ namespace backend___central.Services
             this.logServices = logServices;
         }
 
-        public object CreateChunk(int currentLine, int totalLines)
+        public Chunk CreateChunk(int currentLine, int totalLines, DateTime firstDateTime)
         {
-            return new
-            {
-                StartLine = currentLine,
-                EndLine = Math.Min(currentLine + Startup.Granularity - 1, totalLines)
-            };
+            return new Chunk(currentLine, Math.Min(currentLine + Startup.Granularity - 1, totalLines), firstDateTime);
         }
 
         public async Task<int> GetDictionaryTotalLines()

@@ -1,6 +1,7 @@
+using System.Net;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Hosting;
-using System.Threading.Tasks;
 
 namespace backend___calculating
 {
@@ -15,11 +16,12 @@ namespace backend___calculating
             Host.CreateDefaultBuilder(args)
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
+                    webBuilder.UseStartup<CalculatingStartup>();
                     webBuilder.ConfigureKestrel(options =>
                     {
                         options.Limits.MaxRequestBodySize = 32212254720;
+                        options.Listen(IPAddress.Parse("0.0.0.0"), 5099);
                     });
-                    webBuilder.UseStartup<Startup>();
                 });
     }
 }

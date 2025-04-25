@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
 using backend___central.Services;
+using System.Threading.Tasks;
 using System;
 
 namespace backend___central.Controllers
@@ -17,9 +18,9 @@ namespace backend___central.Controllers
         }
 
         [HttpPost("brute-force")]
-        public IActionResult CrackBruteForce()
+        public async Task<IActionResult> CrackBruteForce()
         {
-            return crackingService.HandleBruteForceCracking(HttpContext);
+            return await crackingService.HandlBruteForceRequest(HttpContext);
         }
 
         [HttpPost("dictionary")]

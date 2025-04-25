@@ -6,7 +6,7 @@ namespace backend___central.Services
 {
     public interface ICrackingService
     {
-        IActionResult HandleBruteForceCracking(HttpContext httpContext);
+        Task<IActionResult> HandlBruteForceRequest(HttpContext httpContext);
         Task<IActionResult> HandleDictionaryCracking(HttpContext httpContext);
     }
 }
