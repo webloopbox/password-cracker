@@ -28,7 +28,7 @@ namespace backend___central.Services
             ResetState();
         }
 
-        public void AddServerTask(CalculatingServerState server, object chunk, string username)
+        public void AddServerTask(CalculatingServerState server, Chunk chunk, string username)
         {
             TaskCompletionSource<bool> taskCompletionSource = new ();
             taskCompletionSources[server] = taskCompletionSource;
@@ -70,13 +70,13 @@ namespace backend___central.Services
             return false;
         }
 
-        private async Task ProcessServerChunkAsync(CalculatingServerState server, object chunk, TaskCompletionSource<bool> taskCompletionSource, string username)
+        private async Task ProcessServerChunkAsync(CalculatingServerState server, Chunk chunk, TaskCompletionSource<bool> taskCompletionSource, string username)
         {
             try
             {
                 await ValidateServerHealth(server);
                 var (response, content) = await SendChunkToServer(server, chunk, username);
-                HandleServerResponse(server, response, content, taskCompletionSource);
+                HandleServerResponse(server, response, content, chunk, taskCompletionSource);
             }
             catch (Exception ex)
             {
@@ -96,7 +96,7 @@ namespace backend___central.Services
             }
         }
         
-        private static async Task<(HttpResponseMessage response, string content)> SendChunkToServer(CalculatingServerState server, object chunk, string username)
+        private static async Task<(HttpResponseMessage response, string content)> SendChunkToServer(CalculatingServerState server, Chunk chunk, string username)
         {
             using HttpClient httpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
             StringContent requestContent = new(
@@ -109,7 +109,7 @@ namespace backend___central.Services
             return (response, responseContent);
         }
         
-        private void HandleServerResponse(CalculatingServerState server, HttpResponseMessage response, string responseContent, TaskCompletionSource<bool> taskCompletionSource)
+        private void HandleServerResponse(CalculatingServerState server, HttpResponseMessage response, string responseContent, Chunk chunk, TaskCompletionSource<bool> taskCompletionSource)
         {
             if (CheckForPasswordFound(server, responseContent, taskCompletionSource))
                 return;
@@ -120,7 +120,7 @@ namespace backend___central.Services
                 HandleFailedResponse(server, response);
                 return;
             }
-            HandleSuccessfulResponse(server, responseContent, taskCompletionSource);
+            HandleSuccessfulResponse(server, responseContent, taskCompletionSource, chunk);
         }
         
         private bool CheckForPasswordFound(CalculatingServerState server, string responseContent, TaskCompletionSource<bool> taskCompletionSource)
@@ -141,9 +141,30 @@ namespace backend___central.Services
             MarkServerAsFailed(server.IpAddress);
             throw new Exception($"Server {server.IpAddress} responded with status code {response.StatusCode}");
         }
-        
-        private void HandleSuccessfulResponse(CalculatingServerState server, string responseContent, TaskCompletionSource<bool> taskCompletionSource)
+         
+        private void HandleSuccessfulResponse(CalculatingServerState server, string responseContent, TaskCompletionSource<bool> taskCompletionSource, Chunk chunk)
         {
+            DateTime lastDateTime = DateTime.UtcNow;
+            int totalCentralExecutionTime = (int)(lastDateTime - chunk.firstDateTime).TotalMilliseconds;
+            int calculatingServerTime = -1;
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(responseContent);
+                if (document.RootElement.TryGetProperty("time", out JsonElement timeElement) && 
+                    timeElement.ValueKind == JsonValueKind.Number)
+                {
+                    calculatingServerTime = timeElement.GetInt32();
+                }
+            }
+            catch (JsonException)
+            {
+                ILogService.LogInfo(logServices, $"Response from server {server.IpAddress} is not in JSON format");
+            }
+            int finalTime = calculatingServerTime > 0 ? totalCentralExecutionTime - calculatingServerTime : totalCentralExecutionTime;
+            ILogService.LogInfo(logServices, 
+                $"[Dictionary] Central: Total = {totalCentralExecutionTime} ms" + 
+                (calculatingServerTime > 0 ? $" | Calculating: ({server.IpAddress}) Total = {calculatingServerTime} ms" : "") + 
+                $" | Communication time = {finalTime} ms");
             ILogService.LogInfo(logServices, $"Server {server.IpAddress} completed chunk processing: {responseContent}");
             taskCompletionSource.TrySetResult(true);
         }
