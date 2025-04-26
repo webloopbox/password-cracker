@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using backend___calculating.Services;
 
-namespace backend___calculating.Services
+namespace backend___calculating.Interfaces
 {
     public abstract class ILogService
     {
+        public static readonly string logFilePath = Path.Combine(Directory.GetCurrentDirectory(), "logs-backend-calculating.txt");
         public abstract void SaveToFile();
         public abstract void LogMessage(string message);
         public static string GetCurrentDate()

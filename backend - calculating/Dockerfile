@@ -1,5 +1,5 @@
 FROM mcr.microsoft.com/dotnet/sdk:5.0 AS dev
-WORKDIR /App
+WORKDIR /Calculating
 
 COPY *.csproj ./
 RUN dotnet restore

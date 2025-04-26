@@ -1,12 +1,12 @@
 using System;
 using System.IO;
+using backend___calculating.Interfaces;
 
 namespace backend___calculating.Services
 {
     public class ErrorLogService : ILogService
     {
         private string LogContent { get; set; } = "";
-        private readonly string logFilePath = Path.Combine(Directory.GetCurrentDirectory(), "logs-backend-calculating.txt");
 
         public override void LogMessage(string message)
         {

@@ -4,6 +4,7 @@ using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
+using backend___central.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,9 +13,9 @@ namespace backend___central.Services
     public class CheckService : ICheckService
     {
         private readonly IEnumerable<ILogService> _logServices;
-        private readonly DictionaryService _dictionaryService;
+        private readonly DictionarySynchronizingService _dictionaryService;
 
-        public CheckService(IEnumerable<ILogService> logServices, DictionaryService dictionaryService)
+        public CheckService(IEnumerable<ILogService> logServices, DictionarySynchronizingService dictionaryService)
         {
             _logServices = logServices;
             _dictionaryService = dictionaryService;
@@ -157,7 +158,7 @@ namespace backend___central.Services
             }
         }
 
-        internal async Task HandleCheckIfCanConnectToCalculatingServer(string serverIpAddress)
+        internal void HandleCheckIfCanConnectToCalculatingServer(string serverIpAddress)
         {
             throw new NotImplementedException();
         }

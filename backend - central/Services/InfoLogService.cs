@@ -1,12 +1,12 @@
 using System;
 using System.IO;
+using backend___central.Interfaces;
 
 namespace backend___central.Services
 {
     public class InfoLogService : ILogService
     {
         private string LogContent { get; set; } = "";
-        private readonly string logFilePath = Path.Combine(Directory.GetCurrentDirectory(), "logs-backend-central.txt");
 
         public override void LogMessage(string message)
         {

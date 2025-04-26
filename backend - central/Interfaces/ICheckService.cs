@@ -2,7 +2,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
-namespace backend___central.Services
+namespace backend___central.Interfaces
 {
     public interface ICheckService
     {

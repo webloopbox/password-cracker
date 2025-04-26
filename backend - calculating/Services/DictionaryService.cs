@@ -11,6 +11,7 @@ using backend___calculating.Models;
 using System.Security.Cryptography;
 using Npgsql;
 using DotNetEnv;
+using backend___calculating.Interfaces;
 
 namespace backend___calculating.Services
 {
@@ -169,9 +170,9 @@ namespace backend___calculating.Services
             {
                 Dictionary<string, JsonElement> request = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(jsonBody)
                     ?? throw new Exception("Request body is empty");
-                if (!request.TryGetValue("username", out var usernameElement))
+                if (!request.TryGetValue("username", out JsonElement usernameElement))
                     throw new Exception("Username not found in request");
-                if (!request.TryGetValue("chunk", out var chunkElement))
+                if (!request.TryGetValue("chunk", out JsonElement chunkElement))
                     throw new Exception("Chunk information not found in request");
                 string username = usernameElement.GetString()
                     ?? throw new Exception("Invalid username format");
@@ -367,4 +368,4 @@ namespace backend___calculating.Services
             return fileName;
         }
     }
-}
+} 

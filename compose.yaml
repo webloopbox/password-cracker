@@ -17,8 +17,8 @@ services:
       context: "./backend - central"
       dockerfile: Dockerfile
     volumes:
-      - "./backend - central:/App"
-      - ".env:/App/.env"
+      - "./backend - central:/Central"
+      - ".env:/Central/.env"
     env_file:
       - .env
     ports:

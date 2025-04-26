@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
+using backend___central.Interfaces;
 using backend___central.Services;
 using DotNetEnv;
 using Microsoft.AspNetCore.Builder;
@@ -17,7 +18,8 @@ namespace backend___central
         private IEnumerable<ILogService>? logServices;
         public static bool IsDatabaseRunning { get; private set; } = false;
         public static List<IPAddress> ServersIpAddresses { get; set; } = new List<IPAddress>();
-        public static int Granularity { get; set; } = 100;
+        public static int DictionaryGranularity { get; set; } = 10000;
+        public static int BruteForceGranularity { get; set; } = 4;
         public IConfiguration Configuration { get; }
 
         public Startup(IConfiguration configuration)
@@ -38,13 +40,18 @@ namespace backend___central
             if (services != null)
             {
                 services.AddControllers();
-                services.AddScoped<DictionaryService>();
+                services.AddScoped<DictionarySynchronizingService>();
                 services.AddScoped<ILogService, InfoLogService>();
                 services.AddScoped<ILogService, ErrorLogService>();
                 services.AddScoped<ICrackingService, CrackingService>();
-                services.AddScoped<IDictionaryService, DictionaryService>();
+                services.AddScoped<IDictionarySynchronizingService, DictionarySynchronizingService>();
                 services.AddScoped<ICheckService, CheckService>();
                 services.AddScoped<CheckService>();
+                services.AddScoped<IResponseProcessingService, ResponseProcessingService>();
+                services.AddScoped<IServerCommunicationService, ServerCommunicationService>();
+                services.AddScoped<IBruteForceCrackingService, BruteForceCrackingService>();
+                services.AddScoped<IDictionaryCrackingService, DictionaryCrackingService>();
+                services.AddScoped<ICrackingService, CrackingService>();
                 services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
                 {
                     options.MultipartBodyLengthLimit = 32212254720;
