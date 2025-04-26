@@ -6,13 +6,17 @@ using System;
 using System.Text.Json;
 using Npgsql;
 using System.Collections.Generic;
-using System.Text.Json.Serialization;
 using backend___calculating.Models;
+using System.Security.Cryptography;
+using System.Text;
+using backend___calculating.Interfaces;
+using System.Numerics;
 
 namespace backend___calculating.Services
 {
     public class BruteForceService : IBruteForceService
     {
+        private const int LogInterval = 1000;
         private readonly IEnumerable<ILogService> logServices;
 
         public BruteForceService(IEnumerable<ILogService> logServices)
@@ -24,90 +28,133 @@ namespace backend___calculating.Services
         {
             DateTime startTime = DateTime.UtcNow;
             ILogService.LogInfo(logServices, "Starting brute force cracking");
-            if (httpContext == null || httpContext.Request?.Body == null)
-            {
-                ILogService.LogError(logServices, "HttpContext or Request.Body is null");
-                return new BadRequestObjectResult(new BruteForceResponse
-                { 
-                    Message = "HttpContext or Request.Body is null.", 
-                    Time = -1,
-                    CalculationTime = -1
-                });
-            }
-            using StreamReader reader = new(httpContext.Request.Body);
-            string bodyContent = await reader.ReadToEndAsync();
-            ILogService.LogInfo(logServices, $"Request body content: {bodyContent}");
             try
             {
-                BruteForceRequest requestData = JsonSerializer.Deserialize<BruteForceRequest>(bodyContent);
-                if (requestData == null || string.IsNullOrEmpty(requestData.UserLogin))
+                if (!IsValidRequest(httpContext))
                 {
-                    ILogService.LogError(logServices, "Invalid request data");
-                    return new BadRequestObjectResult(new BruteForceResponse
-                    { 
-                        Message = "Invalid request data.", 
-                        Time = -1,
-                        CalculationTime = -1
-                    });
+                    return CreateErrorResponse("HttpContext or Request.Body is null.", StatusCodes.Status400BadRequest);
+                }
+                BruteForceRequest? requestData = await ParseRequestBody(httpContext);
+                if (!IsValidRequestData(requestData))
+                {
+                    return CreateErrorResponse("Invalid request data.", StatusCodes.Status400BadRequest);
                 }
                 string? hash = await GetHashFromDatabase(requestData.UserLogin);
                 if (string.IsNullOrEmpty(hash))
                 {
-                    ILogService.LogError(logServices, $"Hash for user login '{requestData.UserLogin}' not found.");
-                    return new NotFoundObjectResult(new BruteForceResponse
-                    { 
-                        Message = $"Hash for user login '{requestData.UserLogin}' not found.", 
-                        Time = -1,
-                        CalculationTime = -1 
-                    });
+                    return CreateErrorResponse($"Hash for user login '{requestData.UserLogin}' not found.", StatusCodes.Status404NotFound);
                 }
-                ILogService.LogInfo(logServices, $"Retrieved hash for user '{requestData.UserLogin}': {hash}");
-                DateTime calculationStartTime = DateTime.UtcNow;
-                int setupTime = (int)(calculationStartTime - startTime).TotalMilliseconds;
-                ILogService.LogInfo(logServices, $"Setup completed in {setupTime}ms");
-                string? foundPassword = PerformBruteForce(requestData.Chars, requestData.PasswordLength, hash);
-                DateTime endTime = DateTime.UtcNow;
-                int totalTime = (int)(endTime - startTime).TotalMilliseconds;
-                int calculationTime = (int)(endTime - calculationStartTime).TotalMilliseconds;
-                int communicationTime = totalTime - calculationTime;
-                ILogService.LogInfo(logServices, $"[BruteForce] Total = {totalTime} ms | " +  $"Calculation = {calculationTime} ms | " +  $"Communication time = {communicationTime} ms");
-                if (foundPassword != null)
-                {
-                    ILogService.LogInfo(logServices, $"Password found: {foundPassword}");
-                    return new OkObjectResult(new BruteForceResponse
-                    {
-                        Message = "Password found.",
-                        Password = foundPassword,
-                        Time = totalTime,
-                        CalculationTime = calculationTime
-                    });
-                }
-                else
-                {
-                    ILogService.LogInfo(logServices, "Password not found in the given range.");
-                    return new OkObjectResult(new BruteForceResponse
-                    {
-                        Message = "Password not found.",
-                        Time = totalTime,
-                        CalculationTime = calculationTime
-                    });
-                }
+                BruteForceResult result = ExecuteBruteForce(startTime, requestData, hash);
+                return CreateBruteForceResponse(result);
             }
             catch (Exception ex)
             {
-                DateTime endTime = DateTime.UtcNow;
-                int totalTime = (int)(endTime - startTime).TotalMilliseconds;
-                ILogService.LogError(logServices, $"Error during brute force: {ex.Message}");
-                return new ObjectResult(new BruteForceResponse
-                {
-                    Message = $"An error occurred during brute force: {ex.Message}",
-                    Time = totalTime,
-                    CalculationTime = -1
-                })
-                {
-                    StatusCode = 500
-                };
+                return HandleException(ex, startTime);
             }
+        }
+
+        private static bool IsValidRequest(HttpContext? httpContext)
+        {
+            return httpContext != null && httpContext.Request?.Body != null;
+        }
+
+        private static bool IsValidRequestData(BruteForceRequest? requestData)
+        {
+            return requestData != null && !string.IsNullOrEmpty(requestData.UserLogin);
+        }
+
+        private async Task<BruteForceRequest?> ParseRequestBody(HttpContext httpContext)
+        {
+            using StreamReader reader = new(httpContext.Request.Body);
+            string bodyContent = await reader.ReadToEndAsync();
+            ILogService.LogInfo(logServices, $"Request body content: {bodyContent}");
+            return JsonSerializer.Deserialize<BruteForceRequest>(bodyContent);
+        }
+
+        private IActionResult CreateErrorResponse(string message, int statusCode)
+        {
+            ILogService.LogError(logServices, message);
+            BruteForceResponse response = new()
+            {
+                Message = message,
+                Time = -1,
+                CalculationTime = -1
+            };
+            return statusCode switch
+            {
+                StatusCodes.Status400BadRequest => new BadRequestObjectResult(response),
+                StatusCodes.Status404NotFound => new NotFoundObjectResult(response),
+                _ => new ObjectResult(response) { StatusCode = statusCode }
+            };
+        }
+
+        private BruteForceResult ExecuteBruteForce(DateTime startTime, BruteForceRequest requestData, string hash)
+        {
+            DateTime calculationStartTime = DateTime.UtcNow;
+            int setupTime = (int)(calculationStartTime - startTime).TotalMilliseconds;
+            ILogService.LogInfo(logServices, $"Setup completed in {setupTime}ms");
+            string? foundPassword = PerformBruteForce(requestData.Chars, requestData.PasswordLength, hash);
+            DateTime endTime = DateTime.UtcNow;
+            int totalTime = (int)(endTime - startTime).TotalMilliseconds;
+            int calculationTime = (int)(endTime - calculationStartTime).TotalMilliseconds;
+            int communicationTime = totalTime - calculationTime;
+            LogTimingMetrics(totalTime, calculationTime, communicationTime);
+            return new BruteForceResult
+            {
+                Password = foundPassword,
+                TotalTime = totalTime,
+                CalculationTime = calculationTime
+            };
+        }
+
+        private void LogTimingMetrics(int totalTime, int calculationTime, int communicationTime)
+        {
+            ILogService.LogInfo(logServices,
+                $"[BruteForce] Total = {totalTime} ms | " +
+                $"Calculation = {calculationTime} ms | " +
+                $"Communication time = {communicationTime} ms");
+        }
+
+        private IActionResult CreateBruteForceResponse(BruteForceResult result)
+        {
+            if (result.Password != null)
+            {
+                ILogService.LogInfo(logServices, $"Password found: {result.Password}");
+                return new OkObjectResult(new BruteForceResponse
+                {
+                    Message = "Password found.",
+                    Password = result.Password,
+                    Time = result.TotalTime,
+                    CalculationTime = result.CalculationTime
+                });
+            }
+            else
+            {
+                ILogService.LogInfo(logServices, "Password not found in the given range.");
+                return new OkObjectResult(new BruteForceResponse
+                {
+                    Message = "Password not found.",
+                    Time = result.TotalTime,
+                    CalculationTime = result.CalculationTime
+                });
+            }
+        }
+
+        private IActionResult HandleException(Exception ex, DateTime startTime)
+        {
+            DateTime endTime = DateTime.UtcNow;
+            int totalTime = (int)(endTime - startTime).TotalMilliseconds;
+            ILogService.LogError(logServices, $"Error during brute force: {ex.Message}");
+            BruteForceResponse bruteForceResponse = new()
+            {
+                Message = $"An error occurred during brute force: {ex.Message}",
+                Time = totalTime,
+                CalculationTime = -1
+            };
+            return new ObjectResult(bruteForceResponse)
+            {
+                StatusCode = 500
+            };
         }
 
         private async Task<string?> GetHashFromDatabase(string userLogin)
@@ -140,55 +187,80 @@ namespace backend___calculating.Services
         {
             DateTime bruteForceStartTime = DateTime.UtcNow;
             ILogService.LogInfo(logServices, $"Starting brute force with chars: '{chars}', length: {passwordLength}, targetHash: {targetHash}");
-            static IEnumerable<string> GenerateCombinations(string chars, int length)
+            BigInteger combinationCount = 0;
+            int charSetSize = chars.Length;
+            BigInteger maxCombinations;
+            if (passwordLength > 20)
             {
-                if (length == 0)
-                {
-                    yield return "";
-                }
-                else
-                {
-                    foreach (var c in chars)
-                    {
-                        foreach (var combination in GenerateCombinations(chars, length - 1))
-                        {
-                            string result = c + combination;
-                            if (result.Length > 12)
-                            {
-                                result = result.Substring(0, 12);
-                            }
-                            yield return result;
-                        }
-                    }
-                }
+                maxCombinations = BigInteger.Pow(charSetSize, passwordLength);
+                ILogService.LogInfo(logServices, $"Character set size: {charSetSize}, Password length: {passwordLength}, Very large search space");
             }
-            int combinationCount = 0;
-            int logInterval = 1000; 
-            foreach (var combination in GenerateCombinations(chars, passwordLength))
+            else
+            {
+                maxCombinations = (long)Math.Pow(charSetSize, passwordLength);
+                ILogService.LogInfo(logServices, $"Character set size: {charSetSize}, Max combinations: {maxCombinations}");
+            }
+            const long MAX_COMBINATIONS_TO_CHECK = long.MaxValue;
+            for (BigInteger i = 0; i < maxCombinations && i < MAX_COMBINATIONS_TO_CHECK; i++)
             {
                 combinationCount++;
-                using var md5 = System.Security.Cryptography.MD5.Create();
-                byte[] inputBytes = System.Text.Encoding.ASCII.GetBytes(combination);
-                byte[] hashBytes = md5.ComputeHash(inputBytes);
-                string computedHash = BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
+                string combination = IndexToCombination(i, chars, passwordLength);
+                string computedHash = CalculateMD5Hash(combination);
                 if (computedHash == targetHash)
                 {
-                    DateTime bruteForceEndTime = DateTime.UtcNow;
-                    int bruteForceTime = (int)(bruteForceEndTime - bruteForceStartTime).TotalMilliseconds;
-                    ILogService.LogInfo(logServices, $"Match found after {combinationCount} combinations in {bruteForceTime}ms! Password: {combination}");
+                    LogPasswordFound(combination, combinationCount, bruteForceStartTime);
                     return combination;
                 }
-                if (combinationCount % logInterval == 0)
-                {
-                    DateTime currentTime = DateTime.UtcNow;
-                    int elapsedTime = (int)(currentTime - bruteForceStartTime).TotalMilliseconds;
-                    ILogService.LogInfo(logServices, $"Checked {combinationCount} combinations in {elapsedTime}ms");
-                }
+                LogProgressIfNeeded(combinationCount, bruteForceStartTime);
             }
-            DateTime endTime = DateTime.UtcNow;
-            int totalBruteForceTime = (int)(endTime - bruteForceStartTime).TotalMilliseconds;
-            ILogService.LogInfo(logServices, $"No match found after checking {combinationCount} combinations in {totalBruteForceTime}ms");
+            LogNoMatchFound(combinationCount, bruteForceStartTime);
             return null;
+        }
+
+
+        private static string IndexToCombination(BigInteger index, string charset, int length)
+        {
+            char[] result = new char[length];
+            int baseN = charset.Length;
+            for (int i = length - 1; i >= 0; i--)
+            {
+                int charIndex = (int)(index % baseN);
+                result[i] = charset[charIndex];
+                index /= baseN;
+            }
+            return new string(result);
+        }
+
+        private static string CalculateMD5Hash(string input)
+        {
+            using MD5 md5 = MD5.Create();
+            byte[] inputBytes = Encoding.ASCII.GetBytes(input);
+            byte[] hashBytes = md5.ComputeHash(inputBytes);
+            return BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
+        }
+
+        private void LogPasswordFound(string combination, BigInteger combinationCount, DateTime startTime)
+        {
+            DateTime endTime = DateTime.UtcNow;
+            int bruteForceTime = (int)(endTime - startTime).TotalMilliseconds;
+            ILogService.LogInfo(logServices, $"Match found after {combinationCount} combinations in {bruteForceTime}ms! Password: {combination}");
+        }
+
+        private void LogProgressIfNeeded(BigInteger combinationCount, DateTime startTime)
+        {
+            if (combinationCount % LogInterval == 0)
+            {
+                DateTime currentTime = DateTime.UtcNow;
+                int elapsedTime = (int)(currentTime - startTime).TotalMilliseconds;
+                ILogService.LogInfo(logServices, $"Checked {combinationCount} combinations in {elapsedTime}ms");
+            }
+        }
+
+        private void LogNoMatchFound(BigInteger combinationCount, DateTime startTime)
+        {
+            DateTime endTime = DateTime.UtcNow;
+            int totalBruteForceTime = (int)(endTime - startTime).TotalMilliseconds;
+            ILogService.LogInfo(logServices, $"No match found after checking {combinationCount} combinations in {totalBruteForceTime}ms");
         }
     }
 }

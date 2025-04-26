@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using backend___central.Interfaces;
 
 namespace backend___central.Services
 {
@@ -17,7 +18,7 @@ namespace backend___central.Services
 
         public Chunk CreateChunk(int currentLine, int totalLines, DateTime firstDateTime)
         {
-            return new Chunk(currentLine, Math.Min(currentLine + Startup.Granularity - 1, totalLines), firstDateTime);
+            return new Chunk(currentLine, Math.Min(currentLine + Startup.DictionaryGranularity - 1, totalLines), firstDateTime);
         }
 
         public async Task<int> GetDictionaryTotalLines()

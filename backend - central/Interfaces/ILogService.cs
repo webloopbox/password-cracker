@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using backend___central.Services;
 
-namespace backend___central.Services
+namespace backend___central.Interfaces
 {
     public abstract class ILogService
     {
+        public static readonly string logFilePath = Path.Combine(Directory.GetCurrentDirectory(), "logs-backend-central.txt");
         public abstract void SaveToFile();
         public abstract void LogMessage(string message);
         public static string GetCurrentDate()
@@ -27,12 +30,12 @@ namespace backend___central.Services
         }
         public static void LogInfo(IEnumerable<ILogService> logServices, string message)
         {
-            ILogService? infoLogService = logServices?.FirstOrDefault(logService => logService is InfoLogService);
+            ILogService? infoLogService = logServices?.FirstOrDefault(logService => logService.GetType() == typeof(InfoLogService));
             infoLogService?.LogMessage($"{message}");
         }
         public static void LogError(IEnumerable<ILogService> logServices, string message)
         {
-            ILogService? errorLogService = logServices?.FirstOrDefault(logService => logService is ErrorLogService);
+            ILogService? errorLogService = logServices?.FirstOrDefault(logService => logService.GetType() == typeof(ErrorLogService));
             errorLogService?.LogMessage($"{message}");
         }
     }

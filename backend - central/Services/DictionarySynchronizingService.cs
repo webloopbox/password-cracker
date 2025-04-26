@@ -6,23 +6,24 @@ using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using backend___central.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace backend___central.Services
 {
-    public class DictionaryService : IDictionaryService
+    public class DictionarySynchronizingService : IDictionarySynchronizingService
     {
         private readonly IEnumerable<ILogService> logServices;
         private string Operation { get; set; }
         public string DictionaryDirectory { get; set; }
         private string[] DirectoryFiles { get; set; }
 
-        public DictionaryService(IEnumerable<ILogService> logServices)
+        public DictionarySynchronizingService(IEnumerable<ILogService> logServices)
         {
-            this.Operation = "";
-            this.DictionaryDirectory = "";
-            this.DirectoryFiles = Array.Empty<string>();
+            Operation = "";
+            DictionaryDirectory = "";
+            DirectoryFiles = Array.Empty<string>();
             this.logServices = logServices;
         }
 

@@ -4,8 +4,8 @@ services:
       context: "./backend - calculating"
       dockerfile: Dockerfile
     volumes:
-      - "./backend - calculating:/App"
-      - ".env:/App/.env"
+      - "./backend - calculating:/Calculating"
+      - ".env:/Calculating/.env"
     ports:
       - "5099:5099"
     env_file:

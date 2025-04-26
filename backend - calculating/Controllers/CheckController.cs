@@ -1,4 +1,4 @@
-using backend___calculating.Services;
+using backend___calculating.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
 namespace backend___calculating.Controllers
@@ -7,9 +7,9 @@ namespace backend___calculating.Controllers
     [Route("api/calculating")]
     public class CheckController : ControllerBase
     {
-        private readonly CheckService checkService;
+        private readonly ICheckService checkService;
 
-        public CheckController(CheckService checkService) {
+        public CheckController(ICheckService checkService) {
             this.checkService = checkService;
         }
 
