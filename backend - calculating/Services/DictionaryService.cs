@@ -71,22 +71,18 @@ namespace backend___calculating.Services
                 ValidateSelectedPasswords(selectedPasswords, chunkInfo);
                 await CheckPasswordsAgainstDatabase(selectedPasswords, username);
                 LogSuccessfulPasswordLoading(selectedPasswords, chunkInfo);
-
                 DateTime endTime = DateTime.UtcNow;
                 int processingTime = (int)(endTime - startTime).TotalMilliseconds;
-
                 return JsonSuccessResponse("Password not found!", processingTime);
             }
             catch (Exception ex)
             {
                 DateTime endTime = DateTime.UtcNow;
                 int processingTime = (int)(endTime - startTime).TotalMilliseconds;
-
                 if (ex.Message.Contains("Password found!"))
                 {
                     return JsonSuccessResponse(ex.Message, processingTime);
                 }
-
                 ILogService.LogError(logServices, $"Error while cracking using dictionary: {ex.Message}");
                 return JsonErrorResponse(ex.Message, processingTime);
             }
@@ -94,13 +90,12 @@ namespace backend___calculating.Services
 
         private static JsonResult JsonSuccessResponse(string message, int processingTime)
         {
-            var resultObject = new
+            object resultObject = new
             {
                 Message = message,
                 Status = 200,
                 Time = processingTime
             };
-
             return new JsonResult(resultObject)
             {
                 StatusCode = 200,
@@ -110,13 +105,12 @@ namespace backend___calculating.Services
 
         private static JsonResult JsonErrorResponse(string errorMessage, int processingTime)
         {
-            var resultObject = new
+            object resultObject = new
             {
                 Message = $"An error occurred while cracking using dictionary: {errorMessage}",
                 Status = 500,
                 Time = processingTime
             };
-
             return new JsonResult(resultObject)
             {
                 StatusCode = 500,

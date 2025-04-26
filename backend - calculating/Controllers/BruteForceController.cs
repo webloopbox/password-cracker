@@ -20,12 +20,10 @@ namespace backend___calculating.Controllers
         public async Task<IActionResult> SynchronizeBruteForce()
         {
             Console.WriteLine("Synchronizing brute force results...");
-
             if (HttpContext == null)
             {
                 return BadRequest("HttpContext is null.");
             }
-
             return await bruteForceService.SynchronizeBruteForce(HttpContext);
         }
     }

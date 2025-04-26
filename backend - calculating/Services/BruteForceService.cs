@@ -7,6 +7,7 @@ using System.Text.Json;
 using Npgsql;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
+using backend___calculating.Models;
 
 namespace backend___calculating.Services
 {
@@ -23,7 +24,6 @@ namespace backend___calculating.Services
         {
             DateTime startTime = DateTime.UtcNow;
             ILogService.LogInfo(logServices, "Starting brute force cracking");
-
             if (httpContext == null || httpContext.Request?.Body == null)
             {
                 ILogService.LogError(logServices, "HttpContext or Request.Body is null");
@@ -34,17 +34,13 @@ namespace backend___calculating.Services
                     CalculationTime = -1
                 });
             }
-
             using StreamReader reader = new(httpContext.Request.Body);
             string bodyContent = await reader.ReadToEndAsync();
-
-            Console.WriteLine($"Request body content from calculating host: {bodyContent}");
             ILogService.LogInfo(logServices, $"Request body content: {bodyContent}");
-
             try
             {
-                var requestData = JsonSerializer.Deserialize<BruteForceRequest>(bodyContent);
-                if (requestData == null || string.IsNullOrEmpty(requestData.userLogin))
+                BruteForceRequest requestData = JsonSerializer.Deserialize<BruteForceRequest>(bodyContent);
+                if (requestData == null || string.IsNullOrEmpty(requestData.UserLogin))
                 {
                     ILogService.LogError(logServices, "Invalid request data");
                     return new BadRequestObjectResult(new BruteForceResponse
@@ -54,48 +50,30 @@ namespace backend___calculating.Services
                         CalculationTime = -1
                     });
                 }
-
-
-                string? hash = await GetHashFromDatabase(requestData.userLogin);
-
+                string? hash = await GetHashFromDatabase(requestData.UserLogin);
                 if (string.IsNullOrEmpty(hash))
                 {
-                    ILogService.LogError(logServices, $"Hash for user login '{requestData.userLogin}' not found.");
+                    ILogService.LogError(logServices, $"Hash for user login '{requestData.UserLogin}' not found.");
                     return new NotFoundObjectResult(new BruteForceResponse
                     { 
-                        Message = $"Hash for user login '{requestData.userLogin}' not found.", 
+                        Message = $"Hash for user login '{requestData.UserLogin}' not found.", 
                         Time = -1,
                         CalculationTime = -1 
                     });
                 }
-
-                ILogService.LogInfo(logServices, $"Retrieved hash for user '{requestData.userLogin}': {hash}");
-                Console.WriteLine($"Retrieved hash for user '{requestData.userLogin}': {hash}");
-
-                // Record the time just before starting the actual brute force calculation
+                ILogService.LogInfo(logServices, $"Retrieved hash for user '{requestData.UserLogin}': {hash}");
                 DateTime calculationStartTime = DateTime.UtcNow;
                 int setupTime = (int)(calculationStartTime - startTime).TotalMilliseconds;
                 ILogService.LogInfo(logServices, $"Setup completed in {setupTime}ms");
-
-                // Perform brute-force cracking
                 string? foundPassword = PerformBruteForce(requestData.Chars, requestData.PasswordLength, hash);
-
-                // Calculate timing information after brute force completes
                 DateTime endTime = DateTime.UtcNow;
                 int totalTime = (int)(endTime - startTime).TotalMilliseconds;
                 int calculationTime = (int)(endTime - calculationStartTime).TotalMilliseconds;
                 int communicationTime = totalTime - calculationTime;
-
-                // Updated logging format
-                ILogService.LogInfo(logServices,
-                    $"[BruteForce] Total = {totalTime} ms | " +
-                    $"Calculation = {calculationTime} ms | " +
-                    $"Communication time = {communicationTime} ms");
-
+                ILogService.LogInfo(logServices, $"[BruteForce] Total = {totalTime} ms | " +  $"Calculation = {calculationTime} ms | " +  $"Communication time = {communicationTime} ms");
                 if (foundPassword != null)
                 {
                     ILogService.LogInfo(logServices, $"Password found: {foundPassword}");
-                    Console.WriteLine($"Password found: {foundPassword}");
                     return new OkObjectResult(new BruteForceResponse
                     {
                         Message = "Password found.",
@@ -107,7 +85,6 @@ namespace backend___calculating.Services
                 else
                 {
                     ILogService.LogInfo(logServices, "Password not found in the given range.");
-                    Console.WriteLine("Password not found in the given range.");
                     return new OkObjectResult(new BruteForceResponse
                     {
                         Message = "Password not found.",
@@ -120,10 +97,7 @@ namespace backend___calculating.Services
             {
                 DateTime endTime = DateTime.UtcNow;
                 int totalTime = (int)(endTime - startTime).TotalMilliseconds;
-
                 ILogService.LogError(logServices, $"Error during brute force: {ex.Message}");
-                Console.WriteLine($"Error during brute force: {ex.Message}");
-
                 return new ObjectResult(new BruteForceResponse
                 {
                     Message = $"An error occurred during brute force: {ex.Message}",
@@ -146,14 +120,11 @@ namespace backend___calculating.Services
                     ILogService.LogError(logServices, "Database connection string is not set.");
                     throw new Exception("Database connection string is not set.");
                 }
-
                 using NpgsqlConnection connection = new(connectionString);
                 await connection.OpenAsync();
-
                 string query = "SELECT password FROM users WHERE login = @login LIMIT 1;";
                 using NpgsqlCommand command = new(query, connection);
                 command.Parameters.AddWithValue("login", userLogin);
-
                 ILogService.LogInfo(logServices, $"Executing query for user: {userLogin}");
                 object? result = await command.ExecuteScalarAsync();
                 return result?.ToString();
@@ -161,7 +132,6 @@ namespace backend___calculating.Services
             catch (Exception ex)
             {
                 ILogService.LogError(logServices, $"Error fetching hash from database: {ex.Message}");
-                Console.WriteLine($"Error fetching hash from database: {ex.Message}");
                 return null;
             }
         }
@@ -170,9 +140,7 @@ namespace backend___calculating.Services
         {
             DateTime bruteForceStartTime = DateTime.UtcNow;
             ILogService.LogInfo(logServices, $"Starting brute force with chars: '{chars}', length: {passwordLength}, targetHash: {targetHash}");
-            Console.WriteLine($"Starting brute force with chars: '{chars}', length: {passwordLength}, targetHash: {targetHash}");
-
-            IEnumerable<string> GenerateCombinations(string chars, int length)
+            static IEnumerable<string> GenerateCombinations(string chars, int length)
             {
                 if (length == 0)
                 {
@@ -194,19 +162,15 @@ namespace backend___calculating.Services
                     }
                 }
             }
-
             int combinationCount = 0;
-            int logInterval = 1000; // Log every 1000 combinations
-
+            int logInterval = 1000; 
             foreach (var combination in GenerateCombinations(chars, passwordLength))
             {
                 combinationCount++;
-
                 using var md5 = System.Security.Cryptography.MD5.Create();
                 byte[] inputBytes = System.Text.Encoding.ASCII.GetBytes(combination);
                 byte[] hashBytes = md5.ComputeHash(inputBytes);
                 string computedHash = BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
-
                 if (computedHash == targetHash)
                 {
                     DateTime bruteForceEndTime = DateTime.UtcNow;
@@ -214,49 +178,17 @@ namespace backend___calculating.Services
                     ILogService.LogInfo(logServices, $"Match found after {combinationCount} combinations in {bruteForceTime}ms! Password: {combination}");
                     return combination;
                 }
-
-                // Log progress periodically
                 if (combinationCount % logInterval == 0)
                 {
                     DateTime currentTime = DateTime.UtcNow;
                     int elapsedTime = (int)(currentTime - bruteForceStartTime).TotalMilliseconds;
                     ILogService.LogInfo(logServices, $"Checked {combinationCount} combinations in {elapsedTime}ms");
                 }
-
             }
-
             DateTime endTime = DateTime.UtcNow;
             int totalBruteForceTime = (int)(endTime - bruteForceStartTime).TotalMilliseconds;
             ILogService.LogInfo(logServices, $"No match found after checking {combinationCount} combinations in {totalBruteForceTime}ms");
-            Console.WriteLine($"No match found after checking {combinationCount} combinations");
             return null;
-        }
-
-        private class BruteForceRequest
-        {
-            [JsonPropertyName("userLogin")]
-            public string userLogin { get; set; } = string.Empty;
-
-            [JsonPropertyName("passwordLength")]
-            public int PasswordLength { get; set; }
-
-            [JsonPropertyName("chars")]
-            public string Chars { get; set; } = string.Empty;
-        }
-
-        private class BruteForceResponse
-        {
-            [JsonPropertyName("message")]
-            public string Message { get; set; } = string.Empty;
-
-            [JsonPropertyName("password")]
-            public string? Password { get; set; } = null;
-
-            [JsonPropertyName("time")]
-            public int Time { get; set; }
-
-            [JsonPropertyName("calculationTime")]
-            public int CalculationTime { get; set; }
         }
     }
 }

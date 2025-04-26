@@ -20,7 +20,7 @@ namespace backend___central.Controllers
         [HttpPost("brute-force")]
         public async Task<IActionResult> CrackBruteForce()
         {
-            return await crackingService.HandlBruteForceRequest(HttpContext);
+            return await crackingService.HandleBruteForceRequest(HttpContext);
         }
 
         [HttpPost("dictionary")]

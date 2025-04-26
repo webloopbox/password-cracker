@@ -63,7 +63,6 @@ export default function PasswordCrackerForm() {
 
     try {
       let response: AxiosResponse<CrackingResponse> | undefined;
-      console.log(data.method === "słownikowa");
       if (data.method === "brute-force") {
         response = await axios.post(`${BASE_URL}/cracking/brute-force`, {
           userLogin: data.username,
@@ -73,7 +72,6 @@ export default function PasswordCrackerForm() {
         const formData = new FormData();
         formData.append("username", data.username);
         if (data.dictionaryFile) {
-          console.log("idzie");
           formData.append("file", data.dictionaryFile);
           await axios.post(`${BASE_URL}/synchronizing/dictionary`, formData, {
             headers: {
