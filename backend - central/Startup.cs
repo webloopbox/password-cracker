@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
@@ -103,25 +104,28 @@ namespace backend___central
             errorLogService?.LogMessage($"An error occurred: {message}");
         }
 
-        private async Task TestConnectionWithDatabase()
+        private void TestConnectionWithDatabase()
         {
             try
             {
-                string? connection = Env.GetString("POSTGRES_DB_CONNECTION_STRING");
-                if (string.IsNullOrEmpty(connection))
+                string? filePath = Environment.GetEnvironmentVariable("PASSWORD_FILE_PATH");
+                bool isFilePathValid = !string.IsNullOrEmpty(filePath);
+                if (isFilePathValid)
                 {
-                    throw new Exception("Database Connection string is null or empty");
+                    if (File.Exists(filePath))
+                    {
+                        LogCentralServerInfo($"Successfully found password file at {filePath}");
+                        IsDatabaseRunning = true;
+                        return;
+                    }
+                    throw new FileNotFoundException($"Password file not found: {filePath}");
                 }
-
-                using Npgsql.NpgsqlConnection connectionReference = new(connection);
-                await connectionReference.OpenAsync();
-                LogCentralServerInfo("Successfully connected to the PostgreSQL database instance");
-                IsDatabaseRunning = true;
+                throw new Exception("Password file path is null or empty");
             }
             catch (Exception ex)
             {
                 IsDatabaseRunning = false;
-                LogCentralServerError($"Database test connection exception: {ex.Message}");
+                LogCentralServerError($"File connection test exception: {ex.Message}");
                 LogCentralServerError($"Stack Trace: {ex.StackTrace}");
             }
         }

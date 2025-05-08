@@ -9,7 +9,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using backend___calculating.Models;
 using System.Security.Cryptography;
-using Npgsql;
 using DotNetEnv;
 using backend___calculating.Interfaces;
 
@@ -20,16 +19,19 @@ namespace backend___calculating.Services
         private readonly IEnumerable<ILogService> logServices;
         private string DictionaryDirectory { get; set; }
         private string[] DirectoryFiles { get; set; }
-        private readonly string connectionString;
+        private readonly IPasswordRepository _passwordRepository;
 
-        public DictionaryService(IEnumerable<ILogService> logServices)
+        public string? FoundPassword { get; private set; }
+        public bool IsPasswordFound { get; private set; }
+
+        public DictionaryService(IEnumerable<ILogService> logServices, IPasswordRepository passwordRepository)
         {
             DictionaryDirectory = "";
             DirectoryFiles = Array.Empty<string>();
             this.logServices = logServices;
-            Env.Load();
-            connectionString = Environment.GetEnvironmentVariable("POSTGRES_DB_CONNECTION_STRING") ??
-                throw new Exception("Database connection string not found in environment variables");
+            _passwordRepository = passwordRepository;
+            IsPasswordFound = false;
+            FoundPassword = null;
         }
 
         public async Task<ActionResult> SynchronizeDictionaryResult(HttpContext httpContext)
@@ -123,29 +125,20 @@ namespace backend___calculating.Services
         {
             int currentPassword = 0;
             int totalPasswords = passwords.Count;
-            using NpgsqlConnection connection = new(connectionString);
-            await connection.OpenAsync();
             foreach (string password in passwords)
             {
                 currentPassword++;
                 string hashedPassword = CalculateMD5Hash(password);
                 ILogService.LogInfo(logServices,
                     $"Checking password [{currentPassword}/{totalPasswords}]: '{password}' (MD5: {hashedPassword})");
-                using NpgsqlCommand command = new(
-                    "SELECT login FROM users WHERE LOWER(login) = LOWER(@username) AND password = @hash LIMIT 1",
-                    connection
-                );
-                command.Parameters.AddWithValue("@hash", hashedPassword);
-                command.Parameters.AddWithValue("@username", username);
-                using NpgsqlDataReader reader = await command.ExecuteReaderAsync();
-                if (await reader.ReadAsync())
+                bool isMatch = await _passwordRepository.CheckPassword(username, hashedPassword);
+                if (isMatch)
                 {
-                    string login = reader.GetString(0);
-                    ILogService.LogInfo(logServices,
-                        $"Password found! Login: {login}, Password: {password}, Hash: {hashedPassword}");
-                    throw new Exception($"Password found! Login: {login}, Password: {password}");
+                    ILogService.LogInfo(logServices, $"Password found for user '{username}': {password}");
+                    FoundPassword = password;
+                    IsPasswordFound = true;
+                    throw new Exception($"Password found! {password}");
                 }
-                await reader.CloseAsync();
             }
         }
 
@@ -238,26 +231,6 @@ namespace backend___calculating.Services
         {
             ILogService.LogInfo(logServices,
                 $"Successfully loaded {selectedPasswords.Count} words from dictionary (lines {chunkInfo.StartLine}-{chunkInfo.EndLine})");
-        }
-
-        private static ContentResult SuccessResponse(string responseContent)
-        {
-            return new ContentResult
-            {
-                Content = responseContent,
-                ContentType = "text/plain",
-                StatusCode = 200
-            };
-        }
-
-        private static ContentResult CreateErrorResponse(string errorMessage)
-        {
-            return new ContentResult
-            {
-                Content = $"An error occurred while cracking using dictionary: {errorMessage}",
-                ContentType = "text/plain",
-                StatusCode = 500
-            };
         }
 
         private async Task<string> HandleSaveFile(IFormFile? iFormFile)
@@ -368,4 +341,4 @@ namespace backend___calculating.Services
             return fileName;
         }
     }
-} 
+}
