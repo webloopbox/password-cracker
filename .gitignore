@@ -30,3 +30,6 @@ dictionary
 insert_users.sql
 logs-backend-calculating.txt
 logs-backend-central.txt
+data
+venv
+.venv

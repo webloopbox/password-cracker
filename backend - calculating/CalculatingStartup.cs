@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using DotNetEnv;
 using backend___calculating.Interfaces;
+using System.IO;
 
 namespace backend___calculating
 {
@@ -43,13 +44,14 @@ namespace backend___calculating
             if (services != null)
             {
                 ConfigureCors(services);
+                services.AddSingleton<ILogService, InfoLogService>();
+                services.AddSingleton<ILogService, ErrorLogService>();
+                services.AddSingleton<IPasswordRepository, FilePasswordRepository>();
                 services.AddScoped<CheckService>();
                 services.AddScoped<DictionaryService>();
                 services.AddScoped<ICheckService, CheckService>();
                 services.AddScoped<IBruteForceService, BruteForceService>();
                 services.AddScoped<IDictionaryService, DictionaryService>();
-                services.AddScoped<ILogService, InfoLogService>();
-                services.AddScoped<ILogService, ErrorLogService>();
                 services.AddControllers();
             }
         }
@@ -101,23 +103,25 @@ namespace backend___calculating
         {
             try
             {
-                string? connection = Env.GetString("POSTGRES_DB_CONNECTION_STRING");
-                bool isConnectionStringValid = !string.IsNullOrEmpty(connection);
-                if (isConnectionStringValid)
+                string? filePath = Environment.GetEnvironmentVariable("PASSWORD_FILE_PATH");
+                bool isFilePathValid = !string.IsNullOrEmpty(filePath);
+                if (isFilePathValid)
                 {
-                    using Npgsql.NpgsqlConnection connectionReference = new(connection);
-                    await connectionReference.OpenAsync();
-                    LogCalculatingServerInfo("Successfully connected to the PostgreSQL database instance");
-                    IsDatabaseRunning = true;
-                    await ConnectWithCentralServer();
-                    return;
+                    if (File.Exists(filePath))
+                    {
+                        LogCalculatingServerInfo($"Successfully found password file at {filePath}");
+                        IsDatabaseRunning = true;
+                        await ConnectWithCentralServer();
+                        return;
+                    }
+                    throw new FileNotFoundException($"Password file not found: {filePath}");
                 }
-                throw new Exception("Database Connection string is null or empty");
+                throw new Exception("Password file path is null or empty");
             }
             catch (Exception ex)
             {
                 IsDatabaseRunning = false;
-                LogCalculatingServerError($"Database test connection exception {ex.Message}");
+                LogCalculatingServerError($"File connection test exception {ex.Message}");
                 StopCalculatingServer();
             }
         }
@@ -138,7 +142,7 @@ namespace backend___calculating
                     throw new Exception("CALCULATING_SERVER_IP is not set in the .env file");
                 }
                 using HttpClient httpClient = new();
-                httpClient.Timeout = TimeSpan.FromSeconds(30);
+                httpClient.Timeout = TimeSpan.FromSeconds(300);
                 string centralServerUri = $"http://{centralServerIp}:5098/api/calculating-server/connect";
                 using MultipartFormDataContent formData = new()
                 {

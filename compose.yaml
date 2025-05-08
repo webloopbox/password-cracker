@@ -19,8 +19,11 @@ services:
     volumes:
       - "./backend - central:/Central"
       - ".env:/Central/.env"
+      - "./data:/Central/data"
     env_file:
       - .env
+    environment:
+      - PASSWORD_FILE_PATH=/Central/data/users_passwords.txt
     ports:
       - "5098:5098"
     networks:

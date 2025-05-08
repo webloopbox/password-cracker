@@ -292,7 +292,7 @@ namespace backend___central.Services
         {
             try
             {
-                using HttpClient httpClient = new() { Timeout = TimeSpan.FromSeconds(5) };
+                using HttpClient httpClient = new() { Timeout = TimeSpan.FromSeconds(300) };
                 string serverUrl = $"http://{serverIp}:5099/api/calculating/check-connection";
                 HttpResponseMessage response = await httpClient.GetAsync(serverUrl);
                 if (!response.IsSuccessStatusCode)

@@ -6,10 +6,13 @@ services:
     volumes:
       - "./backend - calculating:/Calculating"
       - ".env:/Calculating/.env"
+      - "./data:/Calculating/data"
     ports:
       - "5099:5099"
     env_file:
       - .env
+    environment:
+      - PASSWORD_FILE_PATH=/Calculating/data/users_passwords.txt
     networks:
       - password-cracker-network
 

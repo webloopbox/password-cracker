@@ -55,11 +55,11 @@ namespace backend___central.Services
             }
         }
 
-        private static void HandleCheckIfDatabaseIsAlive()
+        public void HandleCheckIfDatabaseIsAlive()
         {
-            if (Startup.IsDatabaseRunning == false)
+            if (!Startup.IsDatabaseRunning)
             {
-                throw new Exception("database for calculating operations is not running");
+                throw new Exception("Password file is not accessible. Please check your configuration.");
             }
         }
 
@@ -68,7 +68,7 @@ namespace backend___central.Services
             try
             {
                 using HttpClient httpClient = new();
-                httpClient.Timeout = TimeSpan.FromSeconds(30);
+                httpClient.Timeout = TimeSpan.FromSeconds(300);
                 string serverUrl = $"http://{ipAddress}:5099/api/calculating/check-dictionary-hash";
                 StringContent dictionaryHash = new(_dictionaryService.GetCurrentDictionaryHashResult());
                 HttpResponseMessage httpResponseMessage = await httpClient.PostAsync(serverUrl, dictionaryHash);
@@ -135,7 +135,7 @@ namespace backend___central.Services
         {
             HttpClient httpClient = new()
             {
-                Timeout = TimeSpan.FromSeconds(30)
+                Timeout = TimeSpan.FromSeconds(300)
             };
             return httpClient;
         }

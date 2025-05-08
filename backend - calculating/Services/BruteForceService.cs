@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Text.Json;
-using Npgsql;
 using System.Collections.Generic;
 using backend___calculating.Models;
 using System.Security.Cryptography;
@@ -19,9 +18,12 @@ namespace backend___calculating.Services
         private const int LogInterval = 1000;
         private readonly IEnumerable<ILogService> logServices;
 
-        public BruteForceService(IEnumerable<ILogService> logServices)
+        private readonly IPasswordRepository _passwordRepository;
+
+        public BruteForceService(IEnumerable<ILogService> logServices, IPasswordRepository passwordRepository)
         {
             this.logServices = logServices;
+            _passwordRepository = passwordRepository;
         }
 
         public async Task<IActionResult> SynchronizeBruteForce(HttpContext httpContext)
@@ -38,6 +40,10 @@ namespace backend___calculating.Services
                 if (!IsValidRequestData(requestData))
                 {
                     return CreateErrorResponse("Invalid request data.", StatusCodes.Status400BadRequest);
+                }
+                if (string.IsNullOrEmpty(requestData?.UserLogin))
+                {
+                    return CreateErrorResponse("User login is null or empty.", StatusCodes.Status400BadRequest);
                 }
                 string? hash = await GetHashFromDatabase(requestData.UserLogin);
                 if (string.IsNullOrEmpty(hash))
@@ -161,24 +167,12 @@ namespace backend___calculating.Services
         {
             try
             {
-                string? connectionString = Environment.GetEnvironmentVariable("POSTGRES_DB_CONNECTION_STRING");
-                if (string.IsNullOrEmpty(connectionString))
-                {
-                    ILogService.LogError(logServices, "Database connection string is not set.");
-                    throw new Exception("Database connection string is not set.");
-                }
-                using NpgsqlConnection connection = new(connectionString);
-                await connection.OpenAsync();
-                string query = "SELECT password FROM users WHERE login = @login LIMIT 1;";
-                using NpgsqlCommand command = new(query, connection);
-                command.Parameters.AddWithValue("login", userLogin);
-                ILogService.LogInfo(logServices, $"Executing query for user: {userLogin}");
-                object? result = await command.ExecuteScalarAsync();
-                return result?.ToString();
+                ILogService.LogInfo(logServices, $"Looking up hash for user: {userLogin}");
+                return await _passwordRepository.GetPasswordHash(userLogin);
             }
             catch (Exception ex)
             {
-                ILogService.LogError(logServices, $"Error fetching hash from database: {ex.Message}");
+                ILogService.LogError(logServices, $"Error getting hash for user {userLogin}: {ex.Message}");
                 return null;
             }
         }

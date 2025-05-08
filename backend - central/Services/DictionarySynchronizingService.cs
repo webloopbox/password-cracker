@@ -158,7 +158,7 @@ namespace backend___central.Services
             try
             {
                 using HttpClient httpClient = new();
-                httpClient.Timeout = TimeSpan.FromSeconds(30);
+                httpClient.Timeout = TimeSpan.FromSeconds(300);
                 using MemoryStream memoryStream = new();
                 await iFormFile.CopyToAsync(memoryStream);
                 memoryStream.Position = 0;
