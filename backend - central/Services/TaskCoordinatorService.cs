@@ -202,7 +202,7 @@ namespace backend___central.Services
             int startIndex = responseContent.IndexOf("Password: ");
             if (startIndex >= 0)
             {
-                startIndex += 10; 
+                startIndex += 10;
                 int endIndex = responseContent.IndexOf('"', startIndex);
                 if (endIndex > startIndex)
                 {
@@ -243,6 +243,15 @@ namespace backend___central.Services
                 (calculatingServerTime > 0 ? $" | Calculating: ({server.IpAddress}) Total = {calculatingServerTime} ms" : "") +
                 $" | Communication time = {finalTime} ms");
             ILogService.LogInfo(logServices, $"Server {server.IpAddress} completed chunk processing: {responseContent}");
+            PerformanceMetricsLogger.LogDictionaryChunkMetrics(
+                logServices,
+                chunk.StartLine,
+                chunk.EndLine,
+                server.IpAddress.ToString(),
+                calculatingServerTime > 0 ? calculatingServerTime : 0,
+                totalCentralExecutionTime,
+                true
+            ); 
             taskCompletionSource.TrySetResult(true);
         }
 

@@ -17,7 +17,10 @@ namespace backend___central.Services
         private readonly IServerCommunicationService serverCommunicationService;
         private readonly IResponseProcessingService responseProcessingService;
 
-        public BruteForceCrackingService(IEnumerable<ILogService> logServices, IServerCommunicationService serverCommunicationService, IResponseProcessingService responseProcessingService)
+        public BruteForceCrackingService(
+            IEnumerable<ILogService> logServices,
+            IServerCommunicationService serverCommunicationService,
+            IResponseProcessingService responseProcessingService)
         {
             this.logServices = logServices;
             this.serverCommunicationService = serverCommunicationService;
@@ -35,6 +38,9 @@ namespace backend___central.Services
                 CrackingCharPackage charPackage = DistributeCharacters();
                 ServerTaskResult taskResult = await ExecuteTasks(charPackage, credentials);
                 int totalTime = (int)(DateTime.UtcNow - startTime).TotalMilliseconds;
+                CrackingResult? successResult = taskResult.Results.FirstOrDefault(r => r.Success);
+                bool passwordFound = successResult != null && successResult.Success;
+                string? serverIp = successResult?.ServerIp;
                 return responseProcessingService.ProcessResults(taskResult, credentials, charPackage, totalTime);
             }
             catch (Exception ex)
@@ -132,9 +138,9 @@ namespace backend___central.Services
             List<string> serverIPs = GetServerIPs();
             ValidateServerCount(serverIPs);
             List<Task<CrackingResult>> tasks = await serverCommunicationService.CreateTasksForPortions(
-                charPackage.CharPortions, 
+                charPackage.CharPortions,
                 credentials.PasswordLength,
-                credentials.UserLogin, 
+                credentials.UserLogin,
                 serverIPs);
             DateTime awaitStartTime = DateTime.UtcNow;
             int taskSetupTime = (int)(awaitStartTime - tasksStartTime).TotalMilliseconds;
@@ -165,10 +171,10 @@ namespace backend___central.Services
 
         private void LogTaskProcessingCompleted(int completedTasksCount, int serverCount, int processingTime)
         {
-            ILogService.LogInfo(logServices, 
-                $"[BruteForce] Processing: Total = {processingTime} ms | " + 
-                $"Tasks completed = {completedTasksCount} | " + 
+            ILogService.LogInfo(logServices,
+                $"[BruteForce] Processing: Total = {processingTime} ms | " +
+                $"Tasks completed = {completedTasksCount} | " +
                 $"Servers used = {serverCount}");
-        }
+        } 
     }
 }

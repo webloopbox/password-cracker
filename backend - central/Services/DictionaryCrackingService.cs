@@ -6,11 +6,13 @@ using Microsoft.AspNetCore.Mvc;
 using backend___central.Models;
 using backend___central.Interfaces;
 using System.Linq;
+using System.Threading;
 
 namespace backend___central.Services
 {
     public class DictionaryCrackingService : IDictionaryCrackingService
     {
+        private int chunksProcessedCounter;
         private volatile bool passwordFound;
         private readonly IEnumerable<ILogService> logServices;
         private readonly ChunkManagerService chunkManager;
@@ -18,11 +20,13 @@ namespace backend___central.Services
         private readonly TaskCoordinatorService taskCoordinator;
         private readonly IResponseProcessingService responseProcessingService;
 
+
         public DictionaryCrackingService(IEnumerable<ILogService> logServices, IResponseProcessingService responseProcessingService)
         {
             this.logServices = logServices;
             this.responseProcessingService = responseProcessingService;
             passwordFound = false;
+            chunksProcessedCounter = 0;
             chunkManager = new ChunkManagerService(logServices);
             serverManager = new ServerManagerService(logServices);
             taskCoordinator = new TaskCoordinatorService(logServices);
@@ -30,15 +34,18 @@ namespace backend___central.Services
 
         public async Task<IActionResult> HandleDictionaryCracking(HttpContext httpContext)
         {
+            DateTime startTime = DateTime.UtcNow;
             try
             {
                 passwordFound = false;
+                chunksProcessedCounter = 0;
                 ILogService.LogInfo(logServices, "Starting dictionary cracking process");
                 int currentLine = 1;
                 string username = await ExtractUsername(httpContext);
                 int totalLines = await GetDictionaryTotalLines();
                 List<CalculatingServerState> serverStates = PrepareServersForDictionaryCracking();
                 currentLine = await ProcessDictionaryWithServers(currentLine, totalLines, username, serverStates);
+                int totalTime = (int)(DateTime.UtcNow - startTime).TotalMilliseconds;
                 ILogService.LogInfo(logServices, $"Dictionary processing completed. passwordFound={passwordFound}, LastFoundPassword={(TaskCoordinatorService.LastFoundPassword != null ? "available" : "null")}");
                 if (passwordFound && TaskCoordinatorService.LastFoundPassword != null)
                 {
@@ -46,14 +53,14 @@ namespace backend___central.Services
                     ILogService.LogInfo(logServices, $"Found password: {passwordInfo.Value} from server {passwordInfo.ServerIp}, returning success response");
                     return responseProcessingService.ProcessDictionaryResult(true, passwordInfo);
                 }
-                
                 ILogService.LogInfo(logServices, "No password found, returning not found response");
                 return responseProcessingService.ProcessDictionaryResult(false, null);
-            } 
+            }
             catch (Exception ex)
             {
+                int errorTime = (int)(DateTime.UtcNow - startTime).TotalMilliseconds;
                 ILogService.LogError(logServices, $"Error in HandleDictionaryCracking: {ex.Message}");
-                return responseProcessingService.HandleError(ex, -1, isDictionary: true);
+                return responseProcessingService.HandleError(ex, errorTime, isDictionary: true);
             }
         }
 
@@ -76,7 +83,7 @@ namespace backend___central.Services
 
         public async Task<int> ProcessDictionaryWithServers(int currentLine, int totalLines, string username, List<CalculatingServerState> serverStates)
         {
-            try 
+            try
             {
                 while (currentLine <= totalLines && !passwordFound)
                 {
@@ -141,7 +148,7 @@ namespace backend___central.Services
             {
                 CancelAllTasks();
             }
-            
+
             return currentLine;
         }
 
@@ -163,6 +170,7 @@ namespace backend___central.Services
             AddServerTask(server, chunk, username);
             int nextLine = IncrementLinePosition(currentLine);
             LogChunkAssignment(currentLine, nextLine, server.IpAddress.ToString());
+            Interlocked.Increment(ref chunksProcessedCounter);
             return nextLine;
         }
 

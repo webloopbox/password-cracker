@@ -17,24 +17,12 @@ namespace backend___central.Services
         private readonly IEnumerable<ILogService> logServices;
         private readonly CheckService checkService;
         private readonly ConcurrentQueue<string> workPackages;
-        private int granularity = 4; 
 
         public ServerCommunicationService(IEnumerable<ILogService> logServices, CheckService checkService)
         {
             this.logServices = logServices;
             this.checkService = checkService;
             workPackages = new ConcurrentQueue<string>();
-        }
-
-        public void SetGranularity(int granularity)
-        {
-            if (granularity <= 0)
-            {
-                ILogService.LogError(logServices, "Granularity must be greater than 0. Using default value of 4.");
-                this.granularity = 4;
-                return;
-            }
-            this.granularity = granularity;
         }
 
         public async Task<HttpResponseMessage> SendRequestToServer(HttpClient httpClient, string serverIpAddress, string payloadJson)
@@ -54,10 +42,10 @@ namespace backend___central.Services
 
         private void CreateCharacterPackages(string charSet)
         {
-            workPackages.Clear(); 
-            for (int i = 0; i < charSet.Length; i += granularity)
+            workPackages.Clear();
+            for (int i = 0; i < charSet.Length; i += Startup.BruteForceGranularity)
             {
-                string package = new (charSet.Skip(i).Take(granularity).ToArray());
+                string package = new(charSet.Skip(i).Take(Startup.BruteForceGranularity).ToArray());
                 if (!string.IsNullOrEmpty(package))
                 {
                     workPackages.Enqueue(package);
@@ -127,8 +115,21 @@ namespace backend___central.Services
                 LogSendingBruteForceRequest(serverIpAddress);
                 HttpResponseMessage response = await SendRequestToServer(httpClient, serverIpAddress, payloadJson);
                 DateTime serverResponseTime = DateTime.UtcNow;
-                int serverRequestTime = (int)(serverResponseTime - serverStartTime).TotalMilliseconds;
-                return await ProcessServerResponse(response, serverIpAddress, serverRequestTime);
+                int totalProcessingTime = (int)(serverResponseTime - serverStartTime).TotalMilliseconds;
+                CrackingResult result = await ProcessServerResponse(response, serverIpAddress, totalProcessingTime);
+                PerformanceMetricsLogger.LogBruteForcePackageMetrics(
+                    logServices,
+                    userLogin,
+                    passwordLength,
+                    chars,  
+                    serverIpAddress,
+                    result.Time,  
+                    totalProcessingTime, 
+                    result.Success,  
+                    Startup.BruteForceGranularity 
+                );
+                
+                return result;
             }
             catch (Exception ex)
             {
@@ -211,12 +212,12 @@ namespace backend___central.Services
             try
             {
                 using JsonDocument document = JsonDocument.Parse(responseContent);
-                if (document.RootElement.TryGetProperty("time", out JsonElement timeElement) && 
+                if (document.RootElement.TryGetProperty("time", out JsonElement timeElement) &&
                     timeElement.ValueKind == JsonValueKind.Number)
                 {
                     return timeElement.GetInt32();
                 }
-                if (document.RootElement.TryGetProperty("calculationTime", out JsonElement calcTimeElement) && 
+                if (document.RootElement.TryGetProperty("calculationTime", out JsonElement calcTimeElement) &&
                     calcTimeElement.ValueKind == JsonValueKind.Number)
                 {
                     return calcTimeElement.GetInt32();
@@ -237,9 +238,9 @@ namespace backend___central.Services
 
         private void LogCentralTiming(int serverRequestTime, int calculatingServerTime, int communicationTime, string serverIpAddress)
         {
-            ILogService.LogInfo(logServices, 
-                $"[BruteForce] Central: Total = {serverRequestTime} ms" + 
-                (calculatingServerTime > 0 ? $" | Calculating: ({serverIpAddress}) Total = {calculatingServerTime} ms" : "") + 
+            ILogService.LogInfo(logServices,
+                $"[BruteForce] Central: Total = {serverRequestTime} ms" +
+                (calculatingServerTime > 0 ? $" | Calculating: ({serverIpAddress}) Total = {calculatingServerTime} ms" : "") +
                 $" | Communication time = {communicationTime} ms");
         }
 
@@ -290,9 +291,9 @@ namespace backend___central.Services
         {
             DateTime errorTime = DateTime.UtcNow;
             int errorDuration = (int)(errorTime - serverStartTime).TotalMilliseconds;
-            ILogService.LogError(logServices, 
+            ILogService.LogError(logServices,
                 $"[BruteForce] Server {serverIpAddress}: Error | " +
-                $"Communication time = {errorDuration} ms | Error: {ex.Message}"); 
+                $"Communication time = {errorDuration} ms | Error: {ex.Message}");
             return new CrackingResult(-1, false, serverIpAddress, "");
         }
     }
