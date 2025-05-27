@@ -7,7 +7,7 @@ using backend___calculating.Services;
 
 namespace backend___calculating.Interfaces
 {
-    public abstract class ILogService
+    public abstract class   
     {
         public static readonly string logFilePath = Path.Combine(Directory.GetCurrentDirectory(), "logs-backend-calculating.txt");
         public abstract void SaveToFile();
