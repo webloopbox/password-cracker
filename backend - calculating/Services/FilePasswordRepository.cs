@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using backend___calculating.Interfaces;
 using System.Linq;
-using System.Collections.Concurrent;
 
 namespace backend___calculating.Services
 {
@@ -54,15 +53,11 @@ namespace backend___calculating.Services
                     ILogService.LogError(_logServices, $"Password file not found at: {_passwordFilePath}");
                     throw new FileNotFoundException($"Password file not found: {_passwordFilePath}");
                 }
-
-                var fileInfo = new FileInfo(_passwordFilePath);
+                FileInfo fileInfo = new (_passwordFilePath);
                 ILogService.LogInfo(_logServices, $"Password file size: {fileInfo.Length} bytes");
-
                 _userPasswords.Clear();
                 int parsedCount = 0;
-
-                // Read line by line instead of loading the entire file at once
-                using (var streamReader = new StreamReader(_passwordFilePath))
+                using (StreamReader streamReader = new(_passwordFilePath))
                 {
                     string? line;
                     while ((line = await streamReader.ReadLineAsync()) != null)
@@ -71,13 +66,11 @@ namespace backend___calculating.Services
                         {
                             continue;
                         }
-
                         if (!line.Contains(':'))
                         {
                             ILogService.LogInfo(_logServices, $"Skipping invalid line (no colon): '{line}'");
                             continue;
                         }
-
                         string[] parts = line.Split(':', 2);
                         if (parts.Length == 2)
                         {
@@ -87,11 +80,8 @@ namespace backend___calculating.Services
                             {
                                 ILogService.LogInfo(_logServices, $"Adding user: '{username}' with hash: '{hash}'");
                             }
-
                             _userPasswords[username] = hash;
                             parsedCount++;
-
-                            // Log progress for large files
                             if (parsedCount % 1000000 == 0)
                             {
                                 ILogService.LogInfo(_logServices, $"Processed {parsedCount} records so far...");
@@ -99,8 +89,6 @@ namespace backend___calculating.Services
                         }
                     }
                 }
-
-                // Check if user1 exists
                 if (_userPasswords.TryGetValue("user1", out string? user1Hash))
                 {
                     ILogService.LogInfo(_logServices, $"user1 hash found: {user1Hash}");
@@ -109,7 +97,6 @@ namespace backend___calculating.Services
                 {
                     ILogService.LogError(_logServices, "user1 not found in the loaded dictionary!");
                 }
-
                 ILogService.LogInfo(_logServices, $"Loaded {parsedCount} valid user records from file");
             }
             catch (Exception ex)
@@ -123,19 +110,14 @@ namespace backend___calculating.Services
         {
             ILogService.LogInfo(_logServices, $"GetPasswordHash called for username: '{username}'");
             ILogService.LogInfo(_logServices, $"Dictionary contains {_userPasswords.Count} entries");
-
             if (_userPasswords.TryGetValue(username, out string? hash))
             {
                 ILogService.LogInfo(_logServices, $"Found hash for '{username}': {hash}");
                 return Task.FromResult<string?>(hash);
             }
-
             ILogService.LogError(_logServices, $"Hash not found for username: '{username}'");
-
-            // Debug: List first few keys in dictionary
-            var keys = _userPasswords.Keys.Take(10).ToList();
+            List<string> keys = _userPasswords.Keys.Take(10).ToList();
             ILogService.LogInfo(_logServices, $"First few keys in dictionary: {string.Join(", ", keys)}");
-
             return Task.FromResult<string?>(null);
         }
 

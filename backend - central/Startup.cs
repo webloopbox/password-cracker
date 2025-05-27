@@ -20,10 +20,10 @@ namespace backend___central
         public static bool IsDatabaseRunning { get; private set; } = false;
         public static List<IPAddress> ServersIpAddresses { get; set; } = new List<IPAddress>();
         public static int DictionaryGranularity { get; set; } = 10000;
-        public static int BruteForceGranularity { get; set; } = 4;
+        public static int BruteForceGranularity { get; set; } = 10;
         public IConfiguration Configuration { get; }
 
-        public Startup(IConfiguration configuration)
+        public Startup(IConfiguration configuration) 
         {
             Env.Load("../.env");
             Configuration = configuration;

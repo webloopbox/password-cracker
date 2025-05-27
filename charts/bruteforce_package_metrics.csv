@@ -1,0 +1,25 @@
+Timestamp,UserLogin,PasswordLength,CharPackage,ServerIp,ProcessingTime,TotalTime,PasswordFound,Granularity
+2025-05-27 20:41:51,user1,5,abcdefghij,192.168.0.12,214,256,False,10
+2025-05-27 20:41:51,user1,5,uvwxyzABCD,192.168.0.12,121,146,False,10
+2025-05-27 20:41:51,user1,5,EFGHIJKLMN,192.168.0.12,130,158,False,10
+2025-05-27 20:41:52,user1,5,OPQRSTUVWX,192.168.0.12,118,230,False,10
+2025-05-27 20:41:52,user1,5,klmnopqrst,192.168.0.13,1006,1055,False,10
+2025-05-27 20:41:52,user1,5,YZ01234567,192.168.0.12,109,131,False,10
+2025-05-27 20:41:52,user1,5,89,192.168.0.13,58,82,False,10
+2025-05-27 20:41:53,user1,5,ab,192.168.0.12,42,98,False,2
+2025-05-27 20:41:53,user1,5,cd,192.168.0.13,38,95,False,2
+2025-05-27 20:41:53,user1,5,ef,192.168.0.12,44,102,False,2
+2025-05-27 20:41:53,user1,5,gh,192.168.0.13,41,97,False,2
+2025-05-27 20:41:54,user1,5,abcd,192.168.0.12,86,125,False,4
+2025-05-27 20:41:54,user1,5,efgh,192.168.0.13,92,131,False,4
+2025-05-27 20:41:54,user1,5,ijkl,192.168.0.12,88,128,False,4
+2025-05-27 20:41:54,user1,5,mnop,192.168.0.13,90,130,False,4
+2025-05-27 20:41:55,user1,5,abcde,192.168.0.12,112,145,False,5
+2025-05-27 20:41:55,user1,5,fghij,192.168.0.13,108,140,False,5
+2025-05-27 20:41:55,user1,5,klmno,192.168.0.12,115,148,False,5
+2025-05-27 20:41:56,user1,5,abcdefghijklmno,192.168.0.12,310,342,False,15
+2025-05-27 20:41:56,user1,5,pqrstuvwxyzABCD,192.168.0.13,298,330,False,15
+2025-05-27 20:41:57,user1,5,abcdefghijklmnopqrst,192.168.0.12,425,452,False,20
+2025-05-27 20:41:57,user1,5,uvwxyzABCDEFGHIJKLMN,192.168.0.13,430,458,False,20
+2025-05-27 20:41:58,user1,5,abcdefghijklmnopqrstuvwxyzABCD,192.168.0.12,710,732,False,30
+2025-05-27 20:41:59,user1,5,abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUV,192.168.0.13,1210,1235,False,50

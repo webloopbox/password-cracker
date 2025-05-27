@@ -9,7 +9,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using backend___calculating.Models;
 using System.Security.Cryptography;
-using DotNetEnv;
 using backend___calculating.Interfaces;
 
 namespace backend___calculating.Services

@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 from enum import Enum
@@ -134,3 +135,37 @@ class GenerateCentralChart(GenerateChart):
         plt.xticks(rotation=45)
         plt.tight_layout()
         plt.show()
+
+        
+def get_project_root():
+    """Get the project root directory from current file location"""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.dirname(current_dir)
+
+def find_log_files():
+    """Find log files in backend central and backend calculating directories"""
+    project_root = get_project_root()
+    central_dir = os.path.join(project_root, "backend - central", "logs-backend-central.txt")
+    calculating_dir = os.path.join(project_root, "backend - calculating", "logs-backend-calculating.txt")
+    if not os.path.exists(central_dir):
+        print(f"Warning: Central directory not found at {central_dir}")
+    if not os.path.exists(calculating_dir):
+        print(f"Warning: Calculating directory not found at {calculating_dir}")
+    return central_dir, calculating_dir
+
+
+if __name__ == "__main__":
+    central_dir, calculating_dir = find_log_files()
+    try:
+        central_data = ReadCentralData(central_dir).read_data()
+        calculating_data = ReadCalculatingData(calculating_dir).read_data()
+        GenerateCentralChart(central_data).generate()
+        GenerateCalculatingChart(calculating_data).generate()
+    except TypeError as e:
+        print(f"Error: Your ReadData classes may not accept directory parameters: {e}")
+        print("Trying with default paths...")
+        central_data = ReadCentralData().read_data()
+        calculating_data = ReadCalculatingData().read_data()
+        
+        GenerateCentralChart(central_data).generate()
+        GenerateCalculatingChart(calculating_data).generate()
