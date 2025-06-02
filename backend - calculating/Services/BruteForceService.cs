@@ -15,7 +15,7 @@ namespace backend___calculating.Services
 {
     public class BruteForceService : IBruteForceService
     {
-        private const int LogInterval = 1000;
+        private const int TimeLimit = 60000;
         private readonly IEnumerable<ILogService> logServices;
 
         private readonly IPasswordRepository _passwordRepository;
@@ -73,7 +73,7 @@ namespace backend___calculating.Services
         {
             using StreamReader reader = new(httpContext.Request.Body);
             string bodyContent = await reader.ReadToEndAsync();
-            ILogService.LogInfo(logServices, $"Request body content: {bodyContent}");
+            // ILogService.LogInfo(logServices, $"Request body content: {bodyContent}");
             return JsonSerializer.Deserialize<BruteForceRequest>(bodyContent);
         }
 
@@ -98,7 +98,7 @@ namespace backend___calculating.Services
         {
             DateTime calculationStartTime = DateTime.UtcNow;
             int setupTime = (int)(calculationStartTime - startTime).TotalMilliseconds;
-            ILogService.LogInfo(logServices, $"Setup completed in {setupTime}ms");
+            // ILogService.LogInfo(logServices, $"Setup completed in {setupTime}ms");
             string? foundPassword = PerformBruteForce(requestData.Chars, requestData.PasswordLength, hash);
             DateTime endTime = DateTime.UtcNow;
             int totalTime = (int)(endTime - startTime).TotalMilliseconds;
@@ -125,7 +125,7 @@ namespace backend___calculating.Services
         {
             if (result.Password != null)
             {
-                ILogService.LogInfo(logServices, $"Password found: {result.Password}");
+                // ILogService.LogInfo(logServices, $"Password found: {result.Password}");
                 return new OkObjectResult(new BruteForceResponse
                 {
                     Message = "Password found.",
@@ -136,7 +136,7 @@ namespace backend___calculating.Services
             }
             else
             {
-                ILogService.LogInfo(logServices, "Password not found in the given range.");
+                // ILogService.LogInfo(logServices, "Password not found in the given range.");
                 return new OkObjectResult(new BruteForceResponse
                 {
                     Message = "Password not found.",
@@ -167,7 +167,7 @@ namespace backend___calculating.Services
         {
             try
             {
-                ILogService.LogInfo(logServices, $"Looking up hash for user: {userLogin}");
+                // ILogService.LogInfo(logServices, $"Looking up hash for user: {userLogin}");
                 return await _passwordRepository.GetPasswordHash(userLogin);
             }
             catch (Exception ex)
@@ -187,16 +187,24 @@ namespace backend___calculating.Services
             if (passwordLength > 20)
             {
                 maxCombinations = BigInteger.Pow(charSetSize, passwordLength);
-                ILogService.LogInfo(logServices, $"Character set size: {charSetSize}, Password length: {passwordLength}, Very large search space");
+                // ILogService.LogInfo(logServices, $"Character set size: {charSetSize}, Password length: {passwordLength}, Very large search space");
             }
             else
             {
                 maxCombinations = (long)Math.Pow(charSetSize, passwordLength);
-                ILogService.LogInfo(logServices, $"Character set size: {charSetSize}, Max combinations: {maxCombinations}");
+                // ILogService.LogInfo(logServices, $"Character set size: {charSetSize}, Max combinations: {maxCombinations}");
             }
             const long MAX_COMBINATIONS_TO_CHECK = long.MaxValue;
             for (BigInteger i = 0; i < maxCombinations && i < MAX_COMBINATIONS_TO_CHECK; i++)
             {
+                // Check if we've reached the time limit
+                int elapsedTime = (int)(DateTime.UtcNow - bruteForceStartTime).TotalMilliseconds;
+                if (elapsedTime >= TimeLimit)
+                {
+                    ILogService.LogInfo(logServices, $"Brute force time limit reached ({TimeLimit}ms). Stopping after {combinationCount} combinations");
+                    break;
+                }
+
                 combinationCount++;
                 string combination = IndexToCombination(i, chars, passwordLength);
                 string computedHash = CalculateMD5Hash(combination);
@@ -235,26 +243,26 @@ namespace backend___calculating.Services
 
         private void LogPasswordFound(string combination, BigInteger combinationCount, DateTime startTime)
         {
-            DateTime endTime = DateTime.UtcNow;
-            int bruteForceTime = (int)(endTime - startTime).TotalMilliseconds;
-            ILogService.LogInfo(logServices, $"Match found after {combinationCount} combinations in {bruteForceTime}ms! Password: {combination}");
+            // DateTime endTime = DateTime.UtcNow;
+            // int bruteForceTime = (int)(endTime - startTime).TotalMilliseconds;
+            // ILogService.LogInfo(logServices, $"Match found after {combinationCount} combinations in {bruteForceTime}ms! Password: {combination}");
         }
 
         private void LogProgressIfNeeded(BigInteger combinationCount, DateTime startTime)
         {
-            if (combinationCount % LogInterval == 0)
-            {
-                DateTime currentTime = DateTime.UtcNow;
-                int elapsedTime = (int)(currentTime - startTime).TotalMilliseconds;
-                ILogService.LogInfo(logServices, $"Checked {combinationCount} combinations in {elapsedTime}ms");
-            }
+            // if (combinationCount % LogInterval == 0)
+            // {
+            //     DateTime currentTime = DateTime.UtcNow;
+            //     int elapsedTime = (int)(currentTime - startTime).TotalMilliseconds;
+            //     ILogService.LogInfo(logServices, $"Checked {combinationCount} combinations in {elapsedTime}ms");
+            // }
         }
 
         private void LogNoMatchFound(BigInteger combinationCount, DateTime startTime)
         {
-            DateTime endTime = DateTime.UtcNow;
-            int totalBruteForceTime = (int)(endTime - startTime).TotalMilliseconds;
-            ILogService.LogInfo(logServices, $"No match found after checking {combinationCount} combinations in {totalBruteForceTime}ms");
+            // DateTime endTime = DateTime.UtcNow;
+            // int totalBruteForceTime = (int)(endTime - startTime).TotalMilliseconds;
+            // ILogService.LogInfo(logServices, $"No match found after checking {combinationCount} combinations in {totalBruteForceTime}ms");
         }
     }
 }

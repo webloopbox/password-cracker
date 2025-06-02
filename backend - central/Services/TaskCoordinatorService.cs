@@ -52,16 +52,16 @@ namespace backend___central.Services
                 await Task.Delay(100);
                 return false;
             }
-            ILogService.LogInfo(logServices, $"Processing {processingTasks.Count} tasks, checking for completed tasks");
+            // ILogService.LogInfo(logServices, $"Processing {processingTasks.Count} tasks, checking for completed tasks");
             Task completedTask = await Task.WhenAny(processingTasks.Values);
             CalculatingServerState completedServer = processingTasks.First(x => x.Value == completedTask).Key;
             try
             {
-                ILogService.LogInfo(logServices, $"Awaiting completed task from server {completedServer.IpAddress}");
+                // ILogService.LogInfo(logServices, $"Awaiting completed task from server {completedServer.IpAddress}");
                 await completedTask;
                 if (LastFoundPassword != null || passwordFound)
                 {
-                    ILogService.LogInfo(logServices, $"Password found after task completion: {(LastFoundPassword != null ? LastFoundPassword.Value : "unknown")}");
+                    // ILogService.LogInfo(logServices, $"Password found after task completion: {(LastFoundPassword != null ? LastFoundPassword.Value : "unknown")}");
                     return true;
                 }
             }
@@ -70,7 +70,7 @@ namespace backend___central.Services
                 ILogService.LogError(logServices, $"Task error: {ex.Message}");
                 HandleServerError(completedServer);
             }
-            ILogService.LogInfo(logServices, $"Task completed normally, removed from tracking");
+            // ILogService.LogInfo(logServices, $"Task completed normally, removed from tracking");
             processingTasks.Remove(completedServer);
             taskCompletionSources.Remove(completedServer);
             return LastFoundPassword != null || passwordFound;
@@ -242,7 +242,7 @@ namespace backend___central.Services
                 $"[Dictionary] Central: Total = {totalCentralExecutionTime} ms" +
                 (calculatingServerTime > 0 ? $" | Calculating: ({server.IpAddress}) Total = {calculatingServerTime} ms" : "") +
                 $" | Communication time = {finalTime} ms");
-            ILogService.LogInfo(logServices, $"Server {server.IpAddress} completed chunk processing: {responseContent}");
+            // ILogService.LogInfo(logServices, $"Server {server.IpAddress} completed chunk processing: {responseContent}");
             PerformanceMetricsLogger.LogDictionaryChunkMetrics(
                 logServices,
                 chunk.StartLine,

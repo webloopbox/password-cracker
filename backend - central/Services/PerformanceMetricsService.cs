@@ -94,11 +94,11 @@ namespace backend___central.Services
                                    $"{Startup.DictionaryGranularity}");
                 }
                 
-                ILogService.LogInfo(logServices, $"Dictionary chunk metrics saved to {path}");
+                // ILogService.LogInfo(logServices, $"Dictionary chunk metrics saved to {path}");
             }
             catch (Exception ex)
             {
-                ILogService.LogError(logServices, $"Failed to log dictionary chunk metrics: {ex.Message}");
+                // ILogService.LogError(logServices, $"Failed to log dictionary chunk metrics: {ex.Message}");
             }
         }
         

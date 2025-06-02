@@ -15,6 +15,7 @@ namespace backend___calculating.Services
 {
     public class DictionaryService : IDictionaryService
     {
+        private const int TimeLimit = 60000;
         private readonly IEnumerable<ILogService> logServices;
         private string DictionaryDirectory { get; set; }
         private string[] DirectoryFiles { get; set; }
@@ -122,14 +123,22 @@ namespace backend___calculating.Services
 
         private async Task CheckPasswordsAgainstDatabase(List<string> passwords, string username)
         {
-            int currentPassword = 0;
+            DateTime startTime = DateTime.UtcNow;
             int totalPasswords = passwords.Count;
+            int checkedPasswords = 0;
+
             foreach (string password in passwords)
             {
-                currentPassword++;
+                int elapsedTime = (int)(DateTime.UtcNow - startTime).TotalMilliseconds;
+                if (elapsedTime >= TimeLimit)
+                {
+                    ILogService.LogInfo(logServices, $"Dictionary check time limit reached ({TimeLimit}ms). Stopping after {checkedPasswords} passwords");
+                    break;
+                }
+                checkedPasswords++;
                 string hashedPassword = CalculateMD5Hash(password);
-                ILogService.LogInfo(logServices,
-                    $"Checking password [{currentPassword}/{totalPasswords}]: '{password}' (MD5: {hashedPassword})");
+                // ILogService.LogInfo(logServices,
+                //     $"Checking password [{checkedPasswords}/{totalPasswords}]: '{password}' (MD5: {hashedPassword})");
                 bool isMatch = await _passwordRepository.CheckPassword(username, hashedPassword);
                 if (isMatch)
                 {
@@ -170,7 +179,7 @@ namespace backend___calculating.Services
                     ?? throw new Exception("Invalid username format");
                 ChunkInfo chunkInfo = JsonSerializer.Deserialize<ChunkInfo>(chunkElement.GetRawText())
                     ?? throw new Exception("Invalid chunk information format");
-                ILogService.LogInfo(logServices, $"Received request for user: {username} with chunk: {chunkInfo.StartLine}-{chunkInfo.EndLine}");
+                // ILogService.LogInfo(logServices, $"Received request for user: {username} with chunk: {chunkInfo.StartLine}-{chunkInfo.EndLine}");
                 return (username, chunkInfo);
             }
             catch (JsonException ex)
@@ -194,7 +203,7 @@ namespace backend___calculating.Services
             using StreamReader streamReader = new(fileStream);
             await SkipLinesToStartPosition(streamReader, chunkInfo.StartLine);
             await ReadRequiredLines(streamReader, selectedPasswords, chunkInfo);
-            ILogService.LogInfo(logServices, "Started cracking password ussing dictionary pack");
+            // ILogService.LogInfo(logServices, "Started cracking password ussing dictionary pack");
             return selectedPasswords;
         }
 
@@ -228,8 +237,8 @@ namespace backend___calculating.Services
 
         private void LogSuccessfulPasswordLoading(List<string> selectedPasswords, ChunkInfo chunkInfo)
         {
-            ILogService.LogInfo(logServices,
-                $"Successfully loaded {selectedPasswords.Count} words from dictionary (lines {chunkInfo.StartLine}-{chunkInfo.EndLine})");
+            // ILogService.LogInfo(logServices,
+            //     $"Successfully loaded {selectedPasswords.Count} words from dictionary (lines {chunkInfo.StartLine}-{chunkInfo.EndLine})");
         }
 
         private async Task<string> HandleSaveFile(IFormFile? iFormFile)

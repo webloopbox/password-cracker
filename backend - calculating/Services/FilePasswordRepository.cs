@@ -123,16 +123,16 @@ namespace backend___calculating.Services
 
         public Task<bool> CheckPassword(string username, string hashedPassword)
         {
-            ILogService.LogInfo(_logServices, $"CheckPassword called for '{username}' with hash '{hashedPassword}'");
+            // ILogService.LogInfo(_logServices, $"CheckPassword called for '{username}' with hash '{hashedPassword}'");
 
             if (_userPasswords.TryGetValue(username, out string? storedHash))
             {
                 bool isMatch = string.Equals(storedHash, hashedPassword, StringComparison.OrdinalIgnoreCase);
-                ILogService.LogInfo(_logServices, $"Password check for '{username}': {isMatch} (stored: {storedHash})");
+                // ILogService.LogInfo(_logServices, $"Password check for '{username}': {isMatch} (stored: {storedHash})");
                 return Task.FromResult(isMatch);
             }
 
-            ILogService.LogError(_logServices, $"No stored hash found for '{username}' during password check");
+            // ILogService.LogError(_logServices, $"No stored hash found for '{username}' during password check");
             return Task.FromResult(false);
         }
     }

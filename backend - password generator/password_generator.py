@@ -33,7 +33,7 @@ def generate_password_files(num_users, users_file="users_passwords.txt", plain_t
                 print(f"Generated {user_id} user records...")
 
 if __name__ == "__main__":
-    NUM_USERS = 30_000_000 
+    NUM_USERS = 2_000_000 
     PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     DATA_DIR = os.path.join(PROJECT_ROOT, "data")
     os.makedirs(DATA_DIR, exist_ok=True)
